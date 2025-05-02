@@ -19,6 +19,9 @@ def _default_compute_score(data_source, solution_str, ground_truth, extra_info=N
         from . import gsm8k
 
         res = gsm8k.compute_score(solution_str, ground_truth)
+    elif data_source == 'simplelr_qwen':
+        from . import simplerl
+        res = simplerl.compute_score(solution_str, ground_truth)
     elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval"]:
         from . import math
 
