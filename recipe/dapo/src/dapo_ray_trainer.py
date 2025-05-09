@@ -32,8 +32,14 @@ from verl.trainer.ppo.metric_utils import (
     compute_timing_metrics,
     reduce_metrics,
 )
+from verl.trainer.ppo.core_algos import agg_loss
 from verl.trainer.ppo.ray_trainer import AdvantageEstimator, RayPPOTrainer, _timer, apply_kl_penalty, compute_advantage
 
+def compute_response_mask(data: DataProto):
+    responses = data.batch["responses"]
+    response_length = responses.size(1)
+    attention_mask = data.batch["attention_mask"]
+    return attention_mask[:, -response_length:]
 
 class RayDAPOTrainer(RayPPOTrainer):
     """
@@ -128,6 +134,7 @@ class RayDAPOTrainer(RayPPOTrainer):
                     # repeat to align with repeated responses in rollout
                     new_batch = new_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
                     new_batch = new_batch.union(gen_batch_output)
+                    new_batch.batch["response_mask"] = compute_response_mask(new_batch)
 
                     with _timer("reward", timing_raw):
                         # compute scores. Support both model and function-based.
@@ -219,6 +226,13 @@ class RayDAPOTrainer(RayPPOTrainer):
                     # recompute old_log_probs
                     with _timer("old_log_prob", timing_raw):
                         old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
+                        entropys = old_log_prob.batch["entropys"]
+                        response_masks = batch.batch["response_mask"]
+                        loss_agg_mode = self.config.actor_rollout_ref.actor.loss_agg_mode
+                        entropy_loss = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode=loss_agg_mode)
+                        old_log_prob_metrics = {"actor/entropy_loss": entropy_loss.detach().item()}
+                        metrics.update(old_log_prob_metrics)
+                        old_log_prob.batch.pop("entropys")
                         batch = batch.union(old_log_prob)
 
                     if self.use_reference_policy:

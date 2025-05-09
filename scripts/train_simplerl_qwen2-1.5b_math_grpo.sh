@@ -9,7 +9,7 @@ set -x
 ### 
 
 export VLLM_ATTENTION_BACKEND=XFORMERS
-HOME=/home/featurize/work/code/python/verlx/datasets/math/SimpleRL/simplerl_qwen_level1to4
+HOME=/root/autodl-tmp/code/verl/datasets/math/SimpleRL/simplerl_qwen_level3to5
 
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
@@ -20,15 +20,16 @@ python3 -m verl.trainer.main_ppo \
     data.max_response_length=3072 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
-    actor_rollout_ref.model.path=/home/featurize/work/Qwen2_5_Math_1_5B_Instruct \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2___5-Math-1___5B-Instruct \
+    actor_rollout_ref.actor.optim.lr=1e-5 \
     actor_rollout_ref.model.use_remove_padding=True \
+    actor_rollout_ref.model.use_liger=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=64 \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=8 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.actor.use_kl_loss=True \
-    actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.kl_loss_coef=0.0001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.entropy_coeff=0.0001 \
+    actor_rollout_ref.actor.entropy_coeff=0.0015 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
@@ -42,11 +43,11 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    trainer.project_name='verl_grpo_simplerl_qwen2-1.5b_math' \
-    trainer.experiment_name='qwen2_1.5b_function_rm' \
+    trainer.project_name='verl_base_4*4090D_autodl' \
+    trainer.experiment_name='qwen2_1.5b_grpo_simplerl_lr1e-5' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
-    trainer.save_freq=-1 \
-    trainer.test_freq=10 \
+    trainer.save_freq=100 \
+    trainer.test_freq=5 \
     trainer.total_epochs=20 \
     trainer.val_before_train=True
