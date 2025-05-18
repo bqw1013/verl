@@ -9,7 +9,7 @@ liger-kernel
 numpy
 pandas
 peft
-pyarrow>=15.0.0
+pyarrow>=19.0.0
 pybind11
 pylatexenc
 pre-commit
@@ -22,3 +22,6 @@ wandb
 word2number
 latex2sympy2
 math-verify
+packaging>=20.0
+uvicorn
+fastapi

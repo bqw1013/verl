@@ -37,6 +37,11 @@ from verl.utils.debug import log_gpu_memory_usage
 from verl.utils.flops_counter import FlopsCounter
 from verl.utils.fs import copy_to_local
 from verl.utils.fsdp_utils import (
+    CPUOffloadPolicy,
+    MixedPrecisionPolicy,
+    apply_fsdp2,
+    fsdp2_load_full_state_dict,
+    fsdp_version,
     get_fsdp_wrap_policy,
     get_init_weight_context_manager,
     init_fn,
@@ -45,6 +50,7 @@ from verl.utils.fsdp_utils import (
     offload_fsdp_model_to_cpu,
     offload_fsdp_optimizer,
 )
+from verl.models.transformers.monkey_patch import apply_monkey_patch
 from verl.utils.import_utils import import_external_libs
 from verl.utils.model import compute_position_id_with_mask
 from verl.workers.sharding_manager.fsdp_ulysses import FSDPUlyssesShardingManager
@@ -147,6 +153,7 @@ class ActorRolloutRefWorker(Worker):
         optim_config,
         override_model_config,
         use_remove_padding=False,
+        use_fused_kernels=False,
         enable_gradient_checkpointing=False,
         trust_remote_code=False,
         use_liger=False,
@@ -209,16 +216,18 @@ class ActorRolloutRefWorker(Worker):
                 trust_remote_code=trust_remote_code,
             )
 
-            if use_remove_padding or self.ulysses_sequence_parallel_size > 1:
-                from verl.models.transformers.monkey_patch import apply_monkey_patch
-
-                apply_monkey_patch(model=actor_module, ulysses_sp_size=self.ulysses_sequence_parallel_size)
-
             # Apply Liger kernel to the model if use_liger is set to True
             if use_liger:
                 from liger_kernel.transformers.monkey_patch import _apply_liger_kernel_to_instance
 
                 _apply_liger_kernel_to_instance(model=actor_module)
+
+            apply_monkey_patch(
+                model=actor_module,
+                use_remove_padding=use_remove_padding,
+                ulysses_sp_size=self.ulysses_sequence_parallel_size,
+                use_fused_kernels=use_fused_kernels,
+            )
 
             # some parameters may not in torch_dtype. TODO(zhangchi.usc1992) remove this after we switch to fsdp2
             actor_module.to(torch_dtype)
@@ -260,19 +269,43 @@ class ActorRolloutRefWorker(Worker):
         # We force reference policy to use CPUOffload to save memory.
         # We force turn off CPUOffload for actor because it causes incorrect results when using grad accumulation
         cpu_offload = None if role == "actor" else CPUOffload(offload_params=True)
-        actor_module_fsdp = FSDP(
-            actor_module,
-            cpu_offload=cpu_offload,
-            param_init_fn=init_fn,
-            use_orig_params=False,
-            auto_wrap_policy=auto_wrap_policy,
-            device_id=torch.cuda.current_device(),
-            sharding_strategy=sharding_strategy,  # zero3
-            mixed_precision=mixed_precision,
-            sync_module_states=True,
-            device_mesh=self.device_mesh,
-            forward_prefetch=False,
-        )
+        fsdp_strategy = self.config.actor.strategy
+        if fsdp_strategy == "fsdp":
+            actor_module_fsdp = FSDP(
+                actor_module,
+                cpu_offload=cpu_offload,
+                param_init_fn=init_fn,
+                use_orig_params=False,
+                auto_wrap_policy=auto_wrap_policy,
+                device_id=torch.cuda.current_device(),
+                sharding_strategy=sharding_strategy,  # zero3
+                mixed_precision=mixed_precision,
+                sync_module_states=True,
+                device_mesh=self.device_mesh,
+                forward_prefetch=False,
+            )
+        elif fsdp_strategy == "fsdp2":
+            assert CPUOffloadPolicy is not None, "PyTorch version >= 2.4 is required for using fully_shard API (FSDP2)"
+            mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype, cast_forward_inputs=True)
+            if role == "actor" and fsdp_config.offload_policy:
+                cpu_offload = CPUOffloadPolicy(pin_memory=True)
+                self._is_offload_param = False
+                self._is_offload_optimizer = False
+            else:
+                cpu_offload = None if role == "actor" else CPUOffloadPolicy(pin_memory=True)
+
+            fsdp_kwargs = {
+                "mesh": fsdp_mesh,
+                "mp_policy": mp_policy,
+                "offload_policy": cpu_offload,
+                "reshard_after_forward": fsdp_config.reshard_after_forward,
+            }
+            full_state = actor_module.state_dict()
+            apply_fsdp2(actor_module, fsdp_kwargs, fsdp_config)
+            fsdp2_load_full_state_dict(actor_module, full_state, fsdp_mesh, cpu_offload)
+            actor_module_fsdp = actor_module
+        else:
+            raise NotImplementedError(f"not implement {fsdp_strategy}")
 
         log_gpu_memory_usage(f"After {role} FSDP init", logger=logger)
 
@@ -290,6 +323,8 @@ class ActorRolloutRefWorker(Worker):
             total_steps = optim_config.get("total_training_steps", 0)
             num_warmup_steps = int(optim_config.get("lr_warmup_steps", -1))
             warmup_style = optim_config.get("warmup_style", "constant")
+            min_lr_ratio = optim_config.get("min_lr_ratio", 0.0)
+            num_cycles = optim_config.get("num_cycles", 0.5)
             if num_warmup_steps < 0:
                 num_warmup_steps_ratio = optim_config.get("lr_warmup_steps_ratio", 0.0)
                 num_warmup_steps = int(num_warmup_steps_ratio * total_steps)
@@ -299,7 +334,7 @@ class ActorRolloutRefWorker(Worker):
             if warmup_style == "constant":
                 actor_lr_scheduler = get_constant_schedule_with_warmup(optimizer=actor_optimizer, num_warmup_steps=num_warmup_steps)
             elif warmup_style == "cosine":
-                actor_lr_scheduler = get_cosine_schedule_with_warmup(optimizer=actor_optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=total_steps)
+                actor_lr_scheduler = get_cosine_schedule_with_warmup(optimizer=actor_optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=total_steps, min_lr_ratio=min_lr_ratio, num_cycles=num_cycles)
             else:
                 raise NotImplementedError(f"Warmup style {warmup_style} is not supported")
 
@@ -328,7 +363,7 @@ class ActorRolloutRefWorker(Worker):
             # TODO: a sharding manager that do nothing?
 
         elif rollout_name == "vllm":
-            from verl.workers.rollout.vllm_rollout import vllm_mode, vLLMAsyncRollout, vLLMRollout
+            from verl.workers.rollout.vllm_rollout import vllm_mode, vLLMRollout
             from verl.workers.sharding_manager.fsdp_vllm import FSDPVLLMShardingManager
 
             log_gpu_memory_usage(f"Before building {rollout_name} rollout", logger=logger)
@@ -339,8 +374,11 @@ class ActorRolloutRefWorker(Worker):
                     config=self.config.rollout,
                     tokenizer=self.tokenizer,
                     model_hf_config=self.actor_model_config,
+                    trust_remote_code=trust_remote_code,
                 )
             elif vllm_mode == "spmd":
+                from verl.workers.rollout.vllm_rollout import vLLMAsyncRollout
+
                 vllm_rollout_cls = vLLMRollout if self.config.rollout.mode == "sync" else vLLMAsyncRollout
                 rollout = vllm_rollout_cls(
                     model_path=local_path,
@@ -370,7 +408,7 @@ class ActorRolloutRefWorker(Worker):
             from verl.workers.rollout.sglang_rollout import SGLangRollout
 
             # NOTE(linjunrong): Due to recent fp8 support in SGLang. Now importing any symbol relate to
-            # SGLang's model_runner would check CUDA device capability. However, due to veRL's setting,
+            # SGLang's model_runner would check CUDA device capability. However, due to verl's setting,
             # the main process of ray can not find any CUDA device, which would potentially lead to:
             # "RuntimeError: No CUDA GPUs are available".
             # For this reason, sharding_manager.__init__ should not import FSDPSGLangShardingManager and
@@ -385,6 +423,7 @@ class ActorRolloutRefWorker(Worker):
                 config=self.config.rollout,
                 tokenizer=self.tokenizer,
                 model_hf_config=self.actor_model_config,
+                trust_remote_code=trust_remote_code,
             )
             log_gpu_memory_usage(f"After building {rollout_name} rollout", logger=logger)
 
@@ -410,6 +449,7 @@ class ActorRolloutRefWorker(Worker):
                 config=self.config.rollout,
                 tokenizer=self.tokenizer,
                 model_hf_config=self.actor_model_config,
+                trust_remote_code=trust_remote_code,
             )
             log_gpu_memory_usage(f"After building {rollout_name} rollout", logger=None)
 
@@ -421,6 +461,7 @@ class ActorRolloutRefWorker(Worker):
                 model_config=self.actor_model_config,
                 full_params="hf" in self.config.rollout.load_format,
                 device_mesh=rollout_device_mesh,
+                offload_param=self._is_offload_param,
             )
             log_gpu_memory_usage("After building sharding manager", logger=None)
 
@@ -441,6 +482,7 @@ class ActorRolloutRefWorker(Worker):
         override_model_config = OmegaConf.to_container(self.config.model.get("override_config", OmegaConf.create()))
 
         use_remove_padding = self.config.model.get("use_remove_padding", False)
+        use_fused_kernels = self.config.model.get("use_fused_kernels", False)
 
         if self._is_actor or self._is_rollout:
             # we need the model for actor and rollout
@@ -450,12 +492,18 @@ class ActorRolloutRefWorker(Worker):
             else:
                 optim_config = None
                 fsdp_config = OmegaConf.create()
-            self.actor_module_fsdp, self.actor_optimizer, self.actor_lr_scheduler, self.actor_model_config = self._build_model_optimizer(
+            (
+                self.actor_module_fsdp,
+                self.actor_optimizer,
+                self.actor_lr_scheduler,
+                self.actor_model_config,
+            ) = self._build_model_optimizer(
                 model_path=self.config.model.path,
                 fsdp_config=fsdp_config,
                 optim_config=optim_config,
                 override_model_config=override_model_config,
                 use_remove_padding=use_remove_padding,
+                use_fused_kernels=use_fused_kernels,
                 enable_gradient_checkpointing=self.config.model.get("enable_gradient_checkpointing", False),
                 trust_remote_code=self.config.model.get("trust_remote_code", False),
                 use_liger=self.config.model.get("use_liger", False),
@@ -463,7 +511,8 @@ class ActorRolloutRefWorker(Worker):
             )
 
             # get the original unwrapped module
-            self.actor_module = self.actor_module_fsdp._fsdp_wrapped_module
+            if fsdp_version(self.actor_module_fsdp) == 1:
+                self.actor_module = self.actor_module_fsdp._fsdp_wrapped_module
 
             if self._is_offload_param:
                 offload_fsdp_model_to_cpu(self.actor_module_fsdp)
@@ -477,6 +526,7 @@ class ActorRolloutRefWorker(Worker):
             OmegaConf.set_struct(self.config.actor, True)
             with open_dict(self.config.actor):
                 self.config.actor.use_remove_padding = use_remove_padding
+                self.config.actor.use_fused_kernels = use_fused_kernels
             self.actor = DataParallelPPOActor(config=self.config.actor, actor_module=self.actor_module_fsdp, actor_optimizer=self.actor_optimizer)
 
         if self._is_rollout:
@@ -489,6 +539,7 @@ class ActorRolloutRefWorker(Worker):
                 optim_config=None,
                 override_model_config=override_model_config,
                 use_remove_padding=use_remove_padding,
+                use_fused_kernels=use_fused_kernels,
                 trust_remote_code=self.config.model.get("trust_remote_code", False),
                 use_liger=self.config.model.get("use_liger", False),
                 role="ref",
@@ -496,6 +547,7 @@ class ActorRolloutRefWorker(Worker):
             OmegaConf.set_struct(self.config.ref, True)
             with open_dict(self.config.ref):
                 self.config.ref.use_remove_padding = use_remove_padding
+                self.config.ref.use_fused_kernels = use_fused_kernels
             self.ref_policy = DataParallelPPOActor(config=self.config.ref, actor_module=self.ref_module_fsdp)
 
         if self._is_actor:
@@ -614,7 +666,7 @@ class ActorRolloutRefWorker(Worker):
 
         # https://pytorch.org/docs/stable/notes/fsdp.html#fsdp-notes
         # unshard the root FSDP module
-        if self.world_size > 1:
+        if self.world_size > 1 and fsdp_version(self.actor.actor_module) == 1:
             self.actor.actor_module._handle.reshard(True)
 
         if self._is_offload_param:
@@ -645,7 +697,7 @@ class ActorRolloutRefWorker(Worker):
 
         # https://pytorch.org/docs/stable/notes/fsdp.html#fsdp-notes
         # unshard the root FSDP module
-        if self.world_size > 1:
+        if self.world_size > 1 and fsdp_version(self.ref_policy.actor_module) == 1:
             self.ref_policy.actor_module._handle.reshard(True)
 
         return output
@@ -754,8 +806,7 @@ class CriticWorker(Worker):
 
         from transformers import AutoConfig, AutoModelForTokenClassification
 
-        trust_remote_code = False
-        critic_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
+        critic_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=config.model.get("trust_remote_code", False))
         critic_model_config.num_labels = 1
 
         init_context = get_init_weight_context_manager(use_meta_tensor=not critic_model_config.tie_word_embeddings, mesh=self.device_mesh)
@@ -769,14 +820,16 @@ class CriticWorker(Worker):
                 torch_dtype=torch_dtype,
                 config=critic_model_config,
                 attn_implementation="flash_attention_2",
-                trust_remote_code=trust_remote_code,
+                trust_remote_code=config.model.get("trust_remote_code", False),
             )
 
             use_remove_padding = config.model.get("use_remove_padding", False)
-            if use_remove_padding or self.ulysses_sequence_parallel_size > 1:
-                from verl.models.transformers.monkey_patch import apply_monkey_patch
 
-                apply_monkey_patch(model=critic_module, ulysses_sp_size=self.ulysses_sequence_parallel_size)
+            apply_monkey_patch(
+                model=critic_module,
+                use_remove_padding=use_remove_padding,
+                ulysses_sp_size=self.ulysses_sequence_parallel_size,
+            )
 
             # some parameters may not in torch_dtype
             critic_module.to(torch_dtype)
@@ -809,19 +862,40 @@ class CriticWorker(Worker):
         sharding_strategy = get_sharding_strategy(fsdp_mesh)
 
         # Note: We force turn off CPUOffload for critic because it causes incorrect results when using grad accumulation
-        critic_module = FSDP(
-            critic_module,
-            param_init_fn=init_fn,
-            use_orig_params=False,
-            auto_wrap_policy=auto_wrap_policy,
-            device_id=torch.cuda.current_device(),
-            sharding_strategy=sharding_strategy,
-            mixed_precision=mixed_precision,
-            sync_module_states=True,
-            forward_prefetch=False,
-            device_mesh=self.device_mesh,
-            cpu_offload=None,
-        )
+        if config.strategy == "fsdp":
+            critic_module = FSDP(
+                critic_module,
+                param_init_fn=init_fn,
+                use_orig_params=False,
+                auto_wrap_policy=auto_wrap_policy,
+                device_id=torch.cuda.current_device(),
+                sharding_strategy=sharding_strategy,
+                mixed_precision=mixed_precision,
+                sync_module_states=True,
+                forward_prefetch=False,
+                device_mesh=self.device_mesh,
+                cpu_offload=None,
+            )
+        elif config.strategy == "fsdp2":
+            assert CPUOffloadPolicy is not None, "PyTorch version >= 2.4 is required for using fully_shard API (FSDP2)"
+            mp_policy = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=reduce_dtype, cast_forward_inputs=True)
+            offload_policy = None
+            if fsdp_config.offload_policy:
+                self._is_offload_param = False
+                self._is_offload_optimizer = False
+                offload_policy = CPUOffloadPolicy(pin_memory=True)
+
+            fsdp_kwargs = {
+                "mesh": fsdp_mesh,
+                "mp_policy": mp_policy,
+                "offload_policy": offload_policy,
+                "reshard_after_forward": fsdp_config.reshard_after_forward,
+            }
+            full_state = critic_module.state_dict()
+            apply_fsdp2(critic_module, fsdp_kwargs, fsdp_config)
+            fsdp2_load_full_state_dict(critic_module, full_state, fsdp_mesh, offload_policy)
+        else:
+            raise NotImplementedError(f"Unknown strategy {config.strategy}")
 
         log_gpu_memory_usage("After critic FSDP", logger=None)
 
@@ -1039,10 +1113,11 @@ class RewardModelWorker(Worker):
                 trust_remote_code=trust_remote_code,
             )
 
-            if config.model.get("use_remove_padding", False) or self.ulysses_sequence_parallel_size > 1:
-                from verl.models.transformers.monkey_patch import apply_monkey_patch
-
-                apply_monkey_patch(model=reward_module, ulysses_sp_size=self.ulysses_sequence_parallel_size)
+            apply_monkey_patch(
+                model=reward_module,
+                use_remove_padding=config.model.get("use_remove_padding", False),
+                ulysses_sp_size=self.ulysses_sequence_parallel_size,
+            )
 
             reward_module.to(torch.bfloat16)
 
@@ -1051,19 +1126,32 @@ class RewardModelWorker(Worker):
         fsdp_mesh = self.device_mesh
         sharding_strategy = get_sharding_strategy(fsdp_mesh)
 
-        reward_module = FSDP(
-            reward_module,
-            param_init_fn=init_fn,
-            use_orig_params=False,
-            auto_wrap_policy=auto_wrap_policy,
-            device_id=torch.cuda.current_device(),
-            sharding_strategy=sharding_strategy,  # zero3
-            sync_module_states=True,
-            cpu_offload=CPUOffload(offload_params=True),
-            forward_prefetch=False,
-            device_mesh=self.device_mesh,
-        )
-
+        if config.strategy == "fsdp":
+            reward_module = FSDP(
+                reward_module,
+                param_init_fn=init_fn,
+                use_orig_params=False,
+                auto_wrap_policy=auto_wrap_policy,
+                device_id=torch.cuda.current_device(),
+                sharding_strategy=sharding_strategy,  # zero3
+                sync_module_states=True,
+                cpu_offload=CPUOffload(offload_params=True),
+                forward_prefetch=False,
+                device_mesh=self.device_mesh,
+            )
+        elif config.strategy == "fsdp2":
+            assert CPUOffloadPolicy is not None, "PyTorch version >= 2.4 is required for using fully_shard API (FSDP2)"
+            cpu_offload = CPUOffloadPolicy(pin_memory=True)
+            fsdp_kwargs = {
+                "mesh": fsdp_mesh,
+                "offload_policy": cpu_offload,
+                "reshard_after_forward": config.model.fsdp_config.reshard_after_forward,
+            }
+            full_state = reward_module.state_dict()
+            apply_fsdp2(reward_module, fsdp_kwargs, config.model.fsdp_config)
+            fsdp2_load_full_state_dict(reward_module, full_state, fsdp_mesh, cpu_offload)
+        else:
+            raise NotImplementedError(f"Unknown strategy: {config.strategy}")
         return reward_module
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)

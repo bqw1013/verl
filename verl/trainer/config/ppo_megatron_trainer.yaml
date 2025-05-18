@@ -87,6 +87,7 @@ actor_rollout_ref:
       contents: ['model', 'optimizer', 'extra']  # with 'hf_model' you can save whole model as hf format, now only use sharded model checkpoint to save space
   ref:
     strategy: megatron
+    use_torch_compile: ${actor_rollout_ref.actor.use_torch_compile}
     megatron:
       param_offload: False
       tensor_model_parallel_size: 1
@@ -228,7 +229,9 @@ reward_model:
   use_dynamic_bsz: ${critic.use_dynamic_bsz}
   max_length: null
   launch_reward_fn_async: False # custom reward function executed async on CPU, during log_prob
-
+  sandbox_fusion:
+    url: null # faas url to run code in cloud sandbox
+    max_concurrent: 64 # max concurrent requests to sandbox
 custom_reward_function:
   path: null
   name: compute_score
