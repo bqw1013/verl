@@ -11,7 +11,7 @@ set -x
 export VLLM_ATTENTION_BACKEND=XFORMERS
 HOME=/root/autodl-tmp/code/verl/datasets/math/SimpleRL/simplerl_qwen_level3to5
 
-python3 -m recipe.dapo.src.main_dapo \
+python3 -m recipe.dapo.main_dapo \
     algorithm.adv_estimator=grpo \
     data.train_files=$HOME/train.parquet \
     data.val_files=$HOME/test.parquet \
