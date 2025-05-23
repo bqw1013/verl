@@ -12,7 +12,7 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 HOME=/root/autodl-tmp/code/verl/datasets/math/SimpleRL/simplerl_qwen_level3to5
 
 python3 -m verl.trainer.main_ppo \
-    algorithm.adv_estimator=grpo \
+    algorithm.adv_estimator=reinforce_plus_plus \
     data.train_files=$HOME/train.parquet \
     data.val_files=$HOME/test.parquet \
     data.train_batch_size=512 \
@@ -21,7 +21,7 @@ python3 -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2___5-Math-1___5B \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr=3e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.use_liger=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=128 \
@@ -44,7 +44,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_algorithem_rebase_8_4090D_autodl' \
-    trainer.experiment_name='qwen2_math_1.5b_grpo' \
+    trainer.experiment_name='qwen2.5_math_1.5b_re++' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=50 \

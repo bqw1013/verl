@@ -1,5 +1,5 @@
 python scripts/model_merger.py merge \
     --backend fsdp \
-    --hf_model_path /root/autodl-fs/models/Qwen/Qwen2___5-Math-1___5B-Instruct\
-    --local_dir /root/autodl-fs/models/verl/checkpoints/qwen2_1.5b_dapo_simplerl_lr1e-5/global_step_100/actor \
-    --target_dir /root/autodl-fs/models/verl/dapo_lr1e-5/step_100
+    --hf_model_path /root/autodl-fs/models/Qwen/Qwen2___5-Math-1___5B-Instruct \
+    --local_dir /root/autodl-fs/models/verl_checkpoints/qwen2.5_math_1.5b_re++/global_step_160/actor \
+    --target_dir /root/autodl-fs/models/verl/qwen2.5_math_1.5b_re++/step_160
