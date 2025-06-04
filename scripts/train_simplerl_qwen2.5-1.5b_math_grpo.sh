@@ -44,7 +44,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_algorithem_rebase_8_4090D_autodl' \
-    trainer.experiment_name='qwen2_math_1.5b_grpo' \
+    trainer.experiment_name='qwen2.5_math_1.5b_grpo' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=50 \

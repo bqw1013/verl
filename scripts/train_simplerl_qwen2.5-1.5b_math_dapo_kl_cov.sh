@@ -27,8 +27,8 @@ python3 -m recipe.dapo.main_dapo \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.use_liger=True \
-    actor_rollout_ref.actor.ppo_mini_batch_size=128 \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=16 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=256 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=32 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.0 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
@@ -37,6 +37,9 @@ python3 -m recipe.dapo.main_dapo \
     actor_rollout_ref.actor.clip_ratio_high=0.28 \
     algorithm.filter_groups.enable=False \
     actor_rollout_ref.actor.clip_ratio_c=10.0 \
+    actor_rollout_ref.actor.loss_mode=kl_cov \
+    actor_rollout_ref.actor.k_percent=0.2 \
+    actor_rollout_ref.actor.ppo_kl_coef=1.0 \
     actor_rollout_ref.actor.grad_clip=1.0 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=True \
@@ -59,7 +62,7 @@ python3 -m recipe.dapo.main_dapo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_algorithem_rebase_8_4090D_autodl' \
-    trainer.experiment_name='qwen2.5_math_1.5b_dapo' \
+    trainer.experiment_name='qwen2.5_math_1.5b_dapo_kl_cov' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=50 \

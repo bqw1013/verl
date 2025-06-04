@@ -21,7 +21,7 @@ python3 -m recipe.dapo.main_dapo \
     data.max_response_length=3072 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
-    actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2___5-Math-1___5B \
+    actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2___5-3B \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.optim.lr_warmup_steps=10 \
     actor_rollout_ref.actor.optim.weight_decay=0.1 \
@@ -45,7 +45,7 @@ python3 -m recipe.dapo.main_dapo \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
-    actor_rollout_ref.rollout.n=8 \
+    actor_rollout_ref.rollout.n=32 \
     actor_rollout_ref.rollout.top_p=1.0 \
     actor_rollout_ref.rollout.top_k=-1 \
     actor_rollout_ref.rollout.temperature=1.0 \
@@ -59,7 +59,7 @@ python3 -m recipe.dapo.main_dapo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
     trainer.project_name='verl_algorithem_rebase_8_4090D_autodl' \
-    trainer.experiment_name='qwen2.5_math_1.5b_dapo' \
+    trainer.experiment_name='qwen2.5_3b_dapo_test' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=50 \
