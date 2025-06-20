@@ -47,6 +47,9 @@ def default_compute_score(data_source, solution_str, ground_truth, extra_info=No
 
         # from . import math_verify
         # res = math_verify.compute_score(solution_str, ground_truth)
+    elif data_source == "simplelr_qwen":
+        from . import math_verify
+        res = math_verify.compute_score(solution_str, ground_truth)
     elif data_source == "math_dapo" or data_source.startswith("aime"):
         from . import math_dapo
 
