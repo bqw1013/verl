@@ -486,9 +486,15 @@ class RayPPOTrainer:
 
             collate_fn = default_collate_fn
 
+        if self.config.data.oversampling_ratio > 1:
+            batch_size = int(self.config.data.train_batch_size * self.config.data.oversampling_ratio)
+        else:
+            batch_size = self.config.data.train_batch_size
+
         self.train_dataloader = StatefulDataLoader(
             dataset=self.train_dataset,
-            batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
+            batch_size=batch_size,
+            # batch_size=self.config.data.get("gen_batch_size", self.config.data.train_batch_size),
             num_workers=self.config.data.get("dataloader_num_workers", 8),
             drop_last=True,
             collate_fn=collate_fn,
@@ -1094,6 +1100,11 @@ class RayPPOTrainer:
                             multi_turn=self.config.actor_rollout_ref.rollout.multi_turn.enable,
                             config=self.config.algorithm,
                         )
+
+                        # TODO: check good prompts ratio
+                        if self.config.data.oversampling_ratio > 1:
+                            selection_mask = core_algos.filter_and_sample_prompts(batch, self.config.data.train_batch_size)
+                            batch = batch.select_idxs(selection_mask)
 
                     # update critic
                     if self.use_critic:

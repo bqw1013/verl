@@ -1,12 +1,4 @@
 set -x
-###
- # @Author: Qiangwei Bai
- # @Date: 2025-06-20 13:04:59
- # @LastEditTime: 2025-06-20 20:12:13
- # @LastEditors: Qiangwei Bai
- # @FilePath: /verl/examples/pkpo/train_grpo_model_qwen2.5_1.5b_data_simplerl.sh
- # @Description: 
-### 
 
 export VLLM_ATTENTION_BACKEND=XFORMERS
 HOME=/root/autodl-tmp/code/verl
@@ -18,6 +10,7 @@ python3 -m verl.trainer.main_ppo \
     data.train_batch_size=32 \
     data.max_prompt_length=1024 \
     data.max_response_length=3072 \
+    data.oversampling_ratio=2.0 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2___5-Math-1___5B \
@@ -41,6 +34,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=8 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
+    algorithm.pkpo.k=4 \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='develop' \

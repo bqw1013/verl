@@ -20,6 +20,7 @@ implement PPO-like algorithms.
 
 __all__ = ["register_adv_est", "get_adv_estimator_fn", "AdvantageEstimator"]
 
+import random
 from collections import defaultdict
 from enum import Enum
 
@@ -27,6 +28,7 @@ import numpy as np
 import torch
 
 import verl.utils.torch_functional as verl_F
+from verl.protocol import DataProto
 
 POLICY_LOSS_REGISTRY = {}
 
@@ -260,52 +262,49 @@ def compute_pkpo_advantage(
     token_level_rewards: torch.Tensor,
     response_mask: torch.Tensor,
     index: np.ndarray,
-    epsilon: float = 1e-6,
-    norm_adv_by_std_in_grpo: str = True,
     config=None,
     **kwargs,
 ):
-    k = 4 # TODO: make it a parameter
-    # TODO: check boundary conditions
+    k = config.pkpo.k
+
     def _rho(n: int, c: int, k: int):
         if k == 0:
             return torch.tensor(0.0)
-        
+
         if n < k or c < 0 or n < c or k < 0:
-            raise ValueError(f"Invalid input: n={n}, c={c}, k={k}. "
-                            "Conditions must satisfy: n >= k, n >= c, c >= 0, k >= 0.")
+            raise ValueError(f"Invalid input: n={n}, c={c}, k={k}. Conditions must satisfy: n >= k, n >= c, c >= 0, k >= 0.")
 
         if n - c < k:
             return torch.tensor(1.0)
 
         i = np.arange(k)
-    
+
         log_numerator = torch.sum(torch.log(torch.tensor(n - c - i)))
-        log_denominator = torch.sum(torch.log(torch.tensor(n - i))) 
-    
+        log_denominator = torch.sum(torch.log(torch.tensor(n - i)))
+
         log_prob_all_fail = log_numerator - log_denominator
         prob_all_fail = torch.exp(log_prob_all_fail)
-    
+
         return 1.0 - prob_all_fail
-    
+
     def _compute_reward_loo_minus_1(r: int, n: int, c: int, k: int):
         if k < 1:
             raise ValueError(f"k must be greater than 0. Got {k}.")
-        
+
         if c > n or k > n:
             raise ValueError(f"c or k must be less than or equal to n. Got c={c}, k={k}, n={n}.")
-        
+
         if r == 0 or c == 0:
             return 0
         else:
             return (k / n) * (1 - _rho(n - 1, c - 1, k - 1))
-        
+
     scores = token_level_rewards.sum(dim=-1)
 
     id2score = defaultdict(list)
     id2n = {}
     id2c = {}
-        
+
     with torch.no_grad():
         bsz = scores.shape[0]
         for i in range(bsz):
@@ -313,7 +312,7 @@ def compute_pkpo_advantage(
         for idx in id2score:
             id2n[idx] = len(id2score[idx])
             id2c[idx] = id2score[idx].count(1)
-        
+
         for i in range(bsz):
             scores[i] = _compute_reward_loo_minus_1(scores[i], id2n[index[i]], id2c[index[i]], k)
 
@@ -998,3 +997,60 @@ def compute_pf_ppo_reweight_data(
     resampled_data.meta_info = resampled_meta_info
 
     return resampled_data
+
+
+def filter_and_sample_prompts(data: DataProto, num_prompts_to_select: int) -> torch.Tensor:
+    prompt_ids = data.non_tensor_batch["index"]
+    rewards = data.batch["token_level_rewards"].sum(dim=-1)
+
+    if prompt_ids.dtype == "object":
+        _, numerical_ids = np.unique(prompt_ids, return_inverse=True)
+    else:
+        numerical_ids = prompt_ids
+
+    prompt_ids_tensor = torch.from_numpy(numerical_ids).to(rewards.device)
+    # prompt_ids_tensor = torch.from_numpy(prompt_ids).to(rewards.device)
+    unique_prompt_ids = torch.unique(prompt_ids_tensor)
+
+    if len(unique_prompt_ids) < num_prompts_to_select:
+        raise ValueError(f"Cannot select {num_prompts_to_select} prompts because only {len(unique_prompt_ids)} unique prompts are available in the input.")
+
+    # Categorize all prompts into "effective" and "less effective"
+    effective_prompt_ids = []
+    less_effective_prompt_ids = []
+
+    for prompt_id in unique_prompt_ids:
+        mask_for_prompt = prompt_ids_tensor == prompt_id
+        rewards_for_prompt = rewards[mask_for_prompt]
+
+        is_too_easy = torch.all(rewards_for_prompt == 1)
+        is_too_hard = torch.all(rewards_for_prompt == 0)
+
+        if not is_too_easy and not is_too_hard:
+            effective_prompt_ids.append(prompt_id.item())
+        else:
+            less_effective_prompt_ids.append(prompt_id.item())
+
+    # Build the final list of selected prompt IDs with priority
+    final_selected_ids = []
+    random.shuffle(effective_prompt_ids)
+
+    # Take as many effective prompts as possible, up to the required number
+    num_to_take_from_effective = min(len(effective_prompt_ids), num_prompts_to_select)
+    final_selected_ids.extend(effective_prompt_ids[:num_to_take_from_effective])
+
+    remaining_needed = num_prompts_to_select - len(final_selected_ids)
+    if remaining_needed > 0:
+        if len(less_effective_prompt_ids) < remaining_needed:
+            raise RuntimeError("Logic error: Not enough prompts to fill the batch.")
+
+        # Randomly sample from the less effective prompts to fill the remaining slots
+        fallback_ids = random.sample(less_effective_prompt_ids, k=remaining_needed)
+        final_selected_ids.extend(fallback_ids)
+
+    print(final_selected_ids)
+
+    selected_prompts_tensor = torch.tensor(final_selected_ids, device=rewards.device)
+    selection_mask = torch.isin(prompt_ids_tensor, selected_prompts_tensor)
+
+    return selection_mask

@@ -38,6 +38,9 @@ data:
   # Batch size sampled for one training iteration of different RL algorithms.
   train_batch_size: 1024
 
+  # Oversampling ratio for effective prompts.
+  oversampling_ratio: 2.0
+
   # Batch size used during validation. Can be null.
   val_batch_size: null
 
@@ -867,6 +870,12 @@ algorithm:
 
     # Power used for weight scaling in "pow" method
     weight_pow: 2.0
+
+  # PKPO settings
+  pkpo:
+
+    # Number of samples to consider for PKPO
+    k: 4
 
 # config for the trainer
 trainer:
