@@ -1018,6 +1018,11 @@ class RayPPOTrainer:
                         else:
                             reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
 
+                    if self.config.data.oversampling_ratio > 1:
+                        selection_mask = core_algos.filter_prompts(batch.non_tensor_batch["index"], reward_tensor.sum(dim=-1), self.config.data.train_batch_size)
+                        batch = batch.select_idxs(selection_mask)
+                        reward_tensor = reward_tensor[selection_mask, :]
+
                     # recompute old_log_probs
                     with marked_timer("old_log_prob", timing_raw, color="blue"):
                         old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
@@ -1100,11 +1105,6 @@ class RayPPOTrainer:
                             multi_turn=self.config.actor_rollout_ref.rollout.multi_turn.enable,
                             config=self.config.algorithm,
                         )
-
-                        # TODO: check good prompts ratio
-                        if self.config.data.oversampling_ratio > 1:
-                            selection_mask = core_algos.filter_and_sample_prompts(batch, self.config.data.train_batch_size)
-                            batch = batch.select_idxs(selection_mask)
 
                     # update critic
                     if self.use_critic:

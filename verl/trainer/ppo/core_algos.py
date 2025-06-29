@@ -28,7 +28,6 @@ import numpy as np
 import torch
 
 import verl.utils.torch_functional as verl_F
-from verl.protocol import DataProto
 
 POLICY_LOSS_REGISTRY = {}
 
@@ -265,7 +264,10 @@ def compute_pkpo_advantage(
     config=None,
     **kwargs,
 ):
-    k = config.pkpo.k
+    k = getattr(config.pkpo, "k", 1)
+    epsilon = getattr(config.pkpo, "epsilon", 1e-6)
+    norm_adv = getattr(config.pkpo, "norm_adv", True)
+    breakpoint()
 
     def _rho(n: int, c: int, k: int):
         if k == 0:
@@ -313,12 +315,34 @@ def compute_pkpo_advantage(
             id2n[idx] = len(id2score[idx])
             id2c[idx] = id2score[idx].count(1)
 
+        pkpo_scores = torch.zeros_like(scores)
         for i in range(bsz):
-            scores[i] = _compute_reward_loo_minus_1(scores[i], id2n[index[i]], id2c[index[i]], k)
+            pkpo_scores[i] = _compute_reward_loo_minus_1(scores[i], id2n[index[i]], id2c[index[i]], k)
 
-        scores = scores.unsqueeze(-1) * response_mask
+        if norm_adv:
+            id2pkpo_score = defaultdict(list)
+            id2mean = {}
+            id2std = {}
 
-    return scores, scores
+            for i in range(bsz):
+                id2pkpo_score[index[i]].append(pkpo_scores[i])
+
+            for idx in id2pkpo_score:
+                if len(id2pkpo_score[idx]) == 1:
+                    id2mean[idx] = torch.tensor(0.0)
+                    id2std[idx] = torch.tensor(1.0)
+                elif len(id2pkpo_score[idx]) > 1:
+                    id2mean[idx] = torch.mean(torch.tensor(id2pkpo_score[idx]))
+                    id2std[idx] = torch.std(torch.tensor(id2pkpo_score[idx]))
+                else:
+                    raise ValueError(f"no score in prompt index: {idx}")
+
+            for i in range(bsz):
+                pkpo_scores[i] = (pkpo_scores[i] - id2mean[index[i]]) / (id2std[index[i]] + epsilon)
+
+        pkpo_scores = pkpo_scores.unsqueeze(-1) * response_mask
+
+    return pkpo_scores, pkpo_scores
 
 
 @register_adv_est(AdvantageEstimator.GRPO_PASSK)  # or simply: @register_adv_est("grpo_passk")
@@ -999,9 +1023,9 @@ def compute_pf_ppo_reweight_data(
     return resampled_data
 
 
-def filter_and_sample_prompts(data: DataProto, num_prompts_to_select: int) -> torch.Tensor:
-    prompt_ids = data.non_tensor_batch["index"]
-    rewards = data.batch["token_level_rewards"].sum(dim=-1)
+def filter_prompts(prompt_ids: torch.Tensor, rewards: torch.Tensor, num_prompts_to_select: int) -> torch.Tensor:
+    # prompt_ids = data.non_tensor_batch["index"]
+    # rewards = data.batch["token_level_rewards"].sum(dim=-1)
 
     if prompt_ids.dtype == "object":
         _, numerical_ids = np.unique(prompt_ids, return_inverse=True)

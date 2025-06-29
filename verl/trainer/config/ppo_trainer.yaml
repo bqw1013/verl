@@ -39,7 +39,7 @@ data:
   train_batch_size: 1024
 
   # Oversampling ratio for effective prompts.
-  oversampling_ratio: 2.0
+  oversampling_ratio: 1.0
 
   # Batch size used during validation. Can be null.
   val_batch_size: null
@@ -876,6 +876,9 @@ algorithm:
 
     # Number of samples to consider for PKPO
     k: 4
+
+    # Whether to normalize advantages
+    norm_adv: False
 
 # config for the trainer
 trainer:
