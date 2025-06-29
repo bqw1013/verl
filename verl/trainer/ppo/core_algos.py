@@ -267,7 +267,6 @@ def compute_pkpo_advantage(
     k = getattr(config.pkpo, "k", 1)
     epsilon = getattr(config.pkpo, "epsilon", 1e-6)
     norm_adv = getattr(config.pkpo, "norm_adv", True)
-    breakpoint()
 
     def _rho(n: int, c: int, k: int):
         if k == 0:
