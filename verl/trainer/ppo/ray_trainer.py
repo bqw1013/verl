@@ -89,6 +89,7 @@ class AdvantageEstimator(str, Enum):
     REINFORCE_PLUS_PLUS_BASELINE = "reinforce_plus_plus_baseline"
     REMAX = "remax"
     RLOO = "rloo"
+    PKPO = "pkpo"
 
 
 @dataclass
@@ -184,7 +185,14 @@ def compute_response_mask(data: DataProto):
     return attention_mask[:, -response_length:]
 
 
-def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_repeat=1, multi_turn=False, norm_adv_by_std_in_grpo=True):
+def compute_advantage(data: DataProto, 
+                      adv_estimator, 
+                      gamma=1.0, 
+                      lam=1.0, 
+                      num_repeat=1, 
+                      multi_turn=False, 
+                      norm_adv_by_std_in_grpo=True,
+                      config=None):
     # Back-compatible with trainers that do not compute response mask in fit
     if "response_mask" not in data.batch:
         data.batch["response_mask"] = compute_response_mask(data)
@@ -246,6 +254,15 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=data.batch["response_mask"],
             index=data.non_tensor_batch["uid"],
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
+    elif adv_estimator == AdvantageEstimator.PKPO:
+        advantages, returns = core_algos.compute_pkpo_advantage(
+            token_level_rewards=data.batch["token_level_rewards"],
+            response_mask=data.batch["response_mask"],
+            index=data.non_tensor_batch["uid"],
+            config=config,
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
@@ -319,6 +336,7 @@ class RayPPOTrainer:
             AdvantageEstimator.REMAX,
             AdvantageEstimator.RLOO,
             AdvantageEstimator.REINFORCE_PLUS_PLUS_BASELINE,
+            AdvantageEstimator.PKPO,
         ]:
             self.use_critic = False
         else:
@@ -1015,6 +1033,7 @@ class RayPPOTrainer:
                             num_repeat=self.config.actor_rollout_ref.rollout.n,
                             norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
                             multi_turn=self.config.actor_rollout_ref.rollout.multi_turn.enable,
+                            config=self.config.algorithm,
                         )
 
                     # update critic

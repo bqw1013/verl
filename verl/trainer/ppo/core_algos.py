@@ -164,6 +164,68 @@ def compute_grpo_outcome_advantage(
 
     return scores, scores
 
+def compute_pkpo_advantage(
+    token_level_rewards: torch.Tensor,
+    response_mask: torch.Tensor,
+    index: np.ndarray,
+    config=None,
+    **kwargs,
+):
+    k = getattr(config.pkpo, "k", 1)
+
+    def _rho(n: int, c: int, k: int):
+        if k == 0:
+            return torch.tensor(0.0)
+
+        if n < k or c < 0 or n < c or k < 0:
+            raise ValueError(f"Invalid input: n={n}, c={c}, k={k}. Conditions must satisfy: n >= k, n >= c, c >= 0, k >= 0.")
+
+        if n - c < k:
+            return torch.tensor(1.0)
+
+        i = np.arange(k)
+
+        log_numerator = torch.sum(torch.log(torch.tensor(n - c - i)))
+        log_denominator = torch.sum(torch.log(torch.tensor(n - i)))
+
+        log_prob_all_fail = log_numerator - log_denominator
+        prob_all_fail = torch.exp(log_prob_all_fail)
+
+        return 1.0 - prob_all_fail
+
+    def _compute_reward_loo_minus_1(r: int, n: int, c: int, k: int):
+        if k < 1:
+            raise ValueError(f"k must be greater than 0. Got {k}.")
+
+        if c > n or k > n:
+            raise ValueError(f"c or k must be less than or equal to n. Got c={c}, k={k}, n={n}.")
+
+        if r == 0 or c == 0:
+            return 0
+        else:
+            return (k / n) * (1 - _rho(n - 1, c - 1, k - 1))
+
+    scores = token_level_rewards.sum(dim=-1)
+
+    id2score = defaultdict(list)
+    id2n = {}
+    id2c = {}
+
+    with torch.no_grad():
+        bsz = scores.shape[0]
+        for i in range(bsz):
+            id2score[index[i]].append(scores[i])
+        for idx in id2score:
+            id2n[idx] = len(id2score[idx])
+            id2c[idx] = id2score[idx].count(1)
+
+        pkpo_scores = torch.zeros_like(scores)
+        for i in range(bsz):
+            pkpo_scores[i] = _compute_reward_loo_minus_1(scores[i], id2n[index[i]], id2c[index[i]], k)
+
+        pkpo_scores = pkpo_scores.unsqueeze(-1) * response_mask
+
+    return pkpo_scores, pkpo_scores
 
 def compute_reinforce_plus_plus_baseline_outcome_advantage(token_level_rewards: torch.Tensor, response_mask: torch.Tensor, index: torch.Tensor, epsilon: float = 1e-6):
     """
@@ -350,6 +412,50 @@ def agg_loss(loss_mat: torch.Tensor, loss_mask: torch.Tensor, loss_agg_mode: str
 
     return loss
 
+def compute_policy_loss_cispo(
+    old_log_prob,
+    log_prob,
+    advantages,
+    response_mask,
+    cliprange=None,
+    cliprange_low=None,
+    cliprange_high=None,
+    clip_ratio_c=3.0,
+    loss_agg_mode="token-mean",
+):
+    """
+    Compute policy loss for CISPO.
+    """
+    negative_approx_kl = log_prob - old_log_prob
+    ratio = torch.exp(negative_approx_kl)
+    ppo_kl = verl_F.masked_mean(-negative_approx_kl, response_mask)
+
+    if cliprange_low is None:
+        cliprange_low = cliprange
+    if cliprange_high is None:
+        cliprange_high = cliprange
+
+    clipped_ratio = torch.clamp(ratio, 1 - cliprange_low, 1 + cliprange_high)
+    clipped_ratio_sg = clipped_ratio.detach()
+
+    pg_losses_cispo = -advantages * clipped_ratio_sg * log_prob * 0.2
+    pg_losses_lower = -advantages * clip_ratio_c * log_prob * 0.2
+    pg_clipfrac = verl_F.masked_mean(torch.ne(ratio, clipped_ratio).float(), response_mask)
+    
+    pg_losses_final = torch.where(
+        advantages < 0, 
+        torch.min(pg_losses_lower, pg_losses_cispo),  # 负优势：取min保护下界
+        pg_losses_cispo  # 正优势：直接使用CISPO
+    )
+    
+    pg_clipfrac_lower = verl_F.masked_mean(
+        torch.gt(pg_losses_cispo, pg_losses_lower).float() * (advantages < 0).float(), 
+        response_mask
+    )
+
+    pg_loss = agg_loss(loss_mat=pg_losses_final, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+
+    return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
 
 def compute_policy_loss(
     old_log_prob,
@@ -430,7 +536,6 @@ def compute_policy_loss_kl_cov(
     k_percent=0.2,
     ppo_kl_coef=1,
 ):
-    print("kl_cov loss")
     negative_approx_kl = log_prob - old_log_prob
 
     abs_kl = negative_approx_kl.abs()
