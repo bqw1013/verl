@@ -454,7 +454,6 @@ def compute_policy_loss_cispo(
     )
 
     pg_loss = agg_loss(loss_mat=pg_losses_final, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
-
     return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
 
 def compute_policy_loss(
@@ -526,6 +525,76 @@ def compute_policy_loss(
 
     return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
 
+def compute_kl_cov_idxs(
+    log_prob,
+    advantages,
+    response_mask,
+    k_percent=0.2,
+):
+    all_valid = (response_mask > 0)
+    all_valid_idx = torch.nonzero(all_valid.reshape(-1), as_tuple=True)[0] 
+    all_valid_adv = advantages[all_valid].detach().reshape(-1).cpu()
+    all_valid_logp = log_prob[all_valid].detach().reshape(-1).cpu()
+
+    k = min(k_percent, len(all_valid_adv))
+    if k != 0:
+        cov_lst_all = (all_valid_adv - all_valid_adv.mean()) * (all_valid_logp - all_valid_logp.mean())
+        k_percent_nums = max(1, int(len(cov_lst_all) * k / 100))
+        large_cov_idxs = torch.topk(cov_lst_all, k_percent_nums, largest=True).indices
+        
+        if len(large_cov_idxs) != 0:
+            large_cov_idxs = all_valid_idx[large_cov_idxs]
+    return large_cov_idxs
+
+def compute_policy_loss_bepo(
+    old_log_prob,
+    log_prob,
+    advantages,
+    response_mask,
+    cliprange=None,
+    cliprange_low=None,
+    cliprange_high=None,
+    clip_ratio_c=3.0,
+    loss_agg_mode="token-mean",
+    k_percent=0.2,
+    ppo_kl_coef=1,
+):
+    negative_approx_kl = log_prob - old_log_prob
+    abs_kl = negative_approx_kl.abs()
+    ratio = torch.exp(negative_approx_kl)
+    ppo_kl = verl_F.masked_mean(-negative_approx_kl, response_mask)
+
+    if cliprange_low is None:
+        cliprange_low = cliprange
+    if cliprange_high is None:
+        cliprange_high = cliprange
+
+    clipped_ratio = torch.clamp(ratio, 1 - cliprange_low, 1 + cliprange_high)
+    clipped_ratio_sg = clipped_ratio.detach()
+
+    pg_losses_cispo = -advantages * clipped_ratio_sg * log_prob
+    pg_losses_kl = - advantages * clipped_ratio_sg * log_prob + ppo_kl_coef * abs_kl
+    pg_losses_lower = -advantages * clip_ratio_c * log_prob
+    pg_losses_cispo = pg_losses_cispo * 0.2
+    pg_losses_lower = pg_losses_lower * 0.2
+    pg_losses_kl = pg_losses_kl * 0.2
+    pg_clipfrac = verl_F.masked_mean(torch.ne(ratio, clipped_ratio).float(), response_mask)
+    
+    pg_losses = torch.where(
+        advantages < 0, 
+        torch.min(pg_losses_lower, pg_losses_cispo),  # 负优势：取min保护下界
+        pg_losses_cispo  # 正优势：直接使用CISPO
+    )
+    
+    pg_clipfrac_lower = verl_F.masked_mean(
+        torch.gt(pg_losses_cispo, pg_losses_lower).float() * (advantages < 0).float(), 
+        response_mask
+    )
+    large_cov_idxs = compute_kl_cov_idxs(log_prob, advantages, response_mask, k_percent)
+    pg_losses[large_cov_idxs // advantages.shape[1], large_cov_idxs % advantages.shape[1]] = pg_losses_kl[large_cov_idxs // advantages.shape[1], large_cov_idxs % advantages.shape[1]]
+
+    pg_loss = agg_loss(loss_mat=pg_losses, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
+    return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
 
 def compute_policy_loss_kl_cov(
     old_log_prob,

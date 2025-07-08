@@ -29,7 +29,7 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 import verl.utils.torch_functional as verl_F
 from verl import DataProto
-from verl.trainer.ppo.core_algos import agg_loss, compute_policy_loss, kl_penalty, compute_policy_loss_kl_cov, compute_policy_loss_cispo
+from verl.trainer.ppo.core_algos import agg_loss, compute_policy_loss, kl_penalty, compute_policy_loss_kl_cov, compute_policy_loss_cispo, compute_policy_loss_bepo
 from verl.utils.debug import GPUMemoryLogger
 from verl.utils.fsdp_utils import FSDPModule, fsdp2_clip_grad_norm_
 from verl.utils.py_functional import append_to_dict
@@ -421,6 +421,20 @@ class DataParallelPPOActor(BasePPOActor):
                             cliprange_high=clip_ratio_high,
                             clip_ratio_c=clip_ratio_c,
                             loss_agg_mode=loss_agg_mode,
+                        )
+                    elif loss_mode == "bepo":
+                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = compute_policy_loss_bepo(
+                            old_log_prob=old_log_prob,
+                            log_prob=log_prob,
+                            advantages=advantages,
+                            response_mask=response_mask,
+                            cliprange=clip_ratio,
+                            cliprange_low=clip_ratio_low,
+                            cliprange_high=clip_ratio_high,
+                            clip_ratio_c=clip_ratio_c,
+                            loss_agg_mode=loss_agg_mode,
+                            k_percent=self.config.k_percent,
+                            ppo_kl_coef=self.config.ppo_kl_coef,
                         )
 
                     if entropy_coeff != 0:
