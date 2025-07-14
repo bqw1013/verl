@@ -223,6 +223,8 @@ algorithm:
     target_kl: 0.1
   pkpo:
     k: 1
+  grponc:
+    neg_score: -0.5
 
 trainer:
   balance_batch: True

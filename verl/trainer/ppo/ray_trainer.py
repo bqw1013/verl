@@ -90,6 +90,7 @@ class AdvantageEstimator(str, Enum):
     REMAX = "remax"
     RLOO = "rloo"
     PKPO = "pkpo"
+    GRPONC = "grponc"
 
 
 @dataclass
@@ -263,6 +264,20 @@ def compute_advantage(data: DataProto,
             response_mask=data.batch["response_mask"],
             index=data.non_tensor_batch["uid"],
             config=config,
+        )
+        data.batch["advantages"] = advantages
+        data.batch["returns"] = returns
+    elif adv_estimator == AdvantageEstimator.GRPONC:
+        grpo_calculation_mask = data.batch["response_mask"]
+        if multi_turn:
+            response_length = grpo_calculation_mask.size(1)  # Get length from the initial response mask
+            grpo_calculation_mask = data.batch["loss_mask"][:, -response_length:]  # This mask is the one intended for GRPO
+        advantages, returns = core_algos.compute_grpo_nc_outcome_advantage(
+            token_level_rewards=data.batch["token_level_rewards"],
+            response_mask=grpo_calculation_mask,
+            index=data.non_tensor_batch["uid"],
+            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+            neg_score=config.grponc.neg_score,
         )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
