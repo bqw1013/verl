@@ -272,7 +272,7 @@ def compute_advantage(data: DataProto,
         if multi_turn:
             response_length = grpo_calculation_mask.size(1)  # Get length from the initial response mask
             grpo_calculation_mask = data.batch["loss_mask"][:, -response_length:]  # This mask is the one intended for GRPO
-        advantages, returns = core_algos.compute_grpo_nc_outcome_advantage(
+        advantages, returns = core_algos.compute_grponc_outcome_advantage(
             token_level_rewards=data.batch["token_level_rewards"],
             response_mask=grpo_calculation_mask,
             index=data.non_tensor_batch["uid"],
@@ -352,6 +352,7 @@ class RayPPOTrainer:
             AdvantageEstimator.RLOO,
             AdvantageEstimator.REINFORCE_PLUS_PLUS_BASELINE,
             AdvantageEstimator.PKPO,
+            AdvantageEstimator.GRPONC,
         ]:
             self.use_critic = False
         else:

@@ -164,7 +164,7 @@ def compute_grpo_outcome_advantage(
 
     return scores, scores
 
-def compute_grpo_nc_outcome_advantage(
+def compute_grponc_outcome_advantage(
     token_level_rewards: torch.Tensor,
     response_mask: torch.Tensor,
     index: np.ndarray,
