@@ -56,9 +56,11 @@ def default_compute_score(
         # from . import math_verify
         # res = math_verify.compute_score(solution_str, ground_truth)
     elif data_source == "math_dapo" or data_source.startswith("aime"):
-        from . import math_dapo
+        # from . import math_dapo
 
-        res = math_dapo.compute_score(solution_str, ground_truth)
+        # res = math_dapo.compute_score(solution_str, ground_truth)
+        from . import math_verify
+        res = math_verify.compute_score(solution_str, ground_truth)
     elif data_source in [
         "numina_aops_forum",
         "numina_synthetic_math",
