@@ -275,10 +275,14 @@ def compute_pkpo_advantage(
             id2n[idx] = len(id2score[idx])
             id2c[idx] = id2score[idx].count(1)
 
+        zero_mask = (scores==0)
         pkpo_scores = torch.zeros_like(scores)
         for i in range(bsz):
             pkpo_scores[i] = _compute_reward_loo_minus_1(scores[i], id2n[index[i]], id2c[index[i]], k)
-
+        # pkpo_scores[pkpo_scores==0] = - _compute_reward_loo_minus_1(1, 8, 5, 4)?
+        sum_non_zeros = pkpo_scores.sum()
+        num_zeros = zero_mask.sum()
+        pkpo_scores[zero_mask] = - sum_non_zeros / num_zeros
         pkpo_scores = pkpo_scores.unsqueeze(-1) * response_mask
 
     return pkpo_scores, pkpo_scores

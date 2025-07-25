@@ -38,7 +38,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='qwen2.5_3b_data_dapo_passk' \
-    trainer.experiment_name='grponc_nc0.0' \
+    trainer.experiment_name='navie_0_1' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \

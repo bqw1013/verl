@@ -4,7 +4,7 @@ export VLLM_ATTENTION_BACKEND=XFORMERS
 HOME=/root/autodl-tmp/code/verl
 
 python3 -m verl.trainer.main_ppo \
-    algorithm.adv_estimator=grponc \
+    algorithm.adv_estimator=pkpo \
     data.train_files=$HOME/datasets/math/math_dapo/train.parquet \
     data.val_files=$HOME/datasets/math/math_dapo/test.parquet \
     data.train_batch_size=512 \
@@ -21,7 +21,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.0001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.entropy_coeff=0.001 \
+    actor_rollout_ref.actor.entropy_coeff=0.0001 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_fused_kernels=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
@@ -34,11 +34,11 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=16 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     algorithm.use_kl_in_reward=False \
-    algorithm.grponc.neg_score=0.0 \
+    algorithm.pkpo.k=4 \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='qwen2.5_3b_data_dapo_passk' \
-    trainer.experiment_name='grponc_nc0.0' \
+    trainer.experiment_name='pkpo_4_pos_rho5_neg_mean' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \

@@ -487,6 +487,8 @@ class RayPPOTrainer:
             val_dataset = create_rl_dataset(self.config.data.val_files, self.config.data, self.tokenizer, self.processor)
         self.train_dataset, self.val_dataset = train_dataset, val_dataset
 
+        print(self.tokenizer.decode(self.train_dataset[0]["input_ids"], skip_special_tokens=True))
+
         if train_sampler is None:
             train_sampler = create_rl_sampler(self.config.data, self.train_dataset)
         if collate_fn is None:
