@@ -41,7 +41,7 @@ python3 -m recipe.uft.main_uft \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='sft_rl_fusion' \
-    trainer.experiment_name='uft' \
+    trainer.experiment_name='uft_countdown' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \
