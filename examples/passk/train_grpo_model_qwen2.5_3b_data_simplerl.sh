@@ -21,7 +21,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.0001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
-    actor_rollout_ref.actor.entropy_coeff=0.0001 \
+    actor_rollout_ref.actor.entropy_coeff=0.001 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_fused_kernels=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
@@ -43,5 +43,5 @@ python3 -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.save_freq=40 \
     trainer.test_freq=5 \
-    trainer.total_epochs=10 \
+    trainer.total_epochs=30 \
     trainer.val_before_train=False

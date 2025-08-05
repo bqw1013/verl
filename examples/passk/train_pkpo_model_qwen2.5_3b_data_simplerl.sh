@@ -13,7 +13,7 @@ python3 -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2.5-3B \
-    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.optim.lr=2e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.use_liger=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
@@ -38,10 +38,10 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='qwen2.5_3b_data_simplerl_passk' \
-    trainer.experiment_name='pkpo_4_neg_mean' \
+    trainer.experiment_name='pkpo_4_neg_rho_lr2e-6' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \
     trainer.test_freq=5 \
-    trainer.total_epochs=10 \
+    trainer.total_epochs=25 \
     trainer.val_before_train=False
