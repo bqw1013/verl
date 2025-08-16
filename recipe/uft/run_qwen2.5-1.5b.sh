@@ -24,6 +24,7 @@ python3 -m recipe.uft.main_uft \
     actor_rollout_ref.actor.kl_loss_coef=0.0001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.entropy_coeff=0.001 \
+    actor_rollout_ref.actor.sft_loss_coef=0.001 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_fused_kernels=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
@@ -44,7 +45,7 @@ python3 -m recipe.uft.main_uft \
     trainer.experiment_name='uft_countdown' \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
-    trainer.save_freq=40 \
+    trainer.save_freq=100 \
     trainer.test_freq=5 \
     trainer.total_training_steps=500 \
     trainer.total_training_steps_hint=300 \
