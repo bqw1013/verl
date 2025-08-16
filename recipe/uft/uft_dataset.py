@@ -216,7 +216,7 @@ class UFTDataset(Dataset):
             sliced_hint = "".join(hint[:slice_length])
             hint_slice_prop = slice_length / len(hint)
 
-        input_ids, attention_mask, hint_ids, hint_mask, prompt_with_hint, messages_with_hint = verl_F.tokenize_and_postprocess_data(
+        input_ids, attention_mask, hint_ids, hint_mask, raw_prompt = verl_F.tokenize_and_postprocess_data(
             messages=messages,
             tokenizer=self.tokenizer,
             max_length=self.max_prompt_length,
@@ -234,27 +234,27 @@ class UFTDataset(Dataset):
         row_dict['hint_slice_prop'] = hint_slice_prop
         row_dict['hint_mask'] = hint_mask[0]
 
-        prompt_with_hint_ids = self.tokenizer.encode(prompt_with_hint, add_special_tokens=False)
-        if len(prompt_with_hint_ids) > self.max_prompt_length:
+        raw_prompt_ids = self.tokenizer.encode(raw_prompt, add_special_tokens=False)
+        if len(raw_prompt_ids) > self.max_prompt_length:
             if self.truncation == "left":
-                prompt_with_hint_ids = prompt_with_hint_ids[-self.max_prompt_length :]
+                raw_prompt_ids = raw_prompt_ids[-self.max_prompt_length :]
             elif self.truncation == "right":
-                prompt_with_hint_ids = prompt_with_hint_ids[: self.max_prompt_length]
+                raw_prompt_ids = raw_prompt_ids[: self.max_prompt_length]
             elif self.truncation == "middle":
                 left_half = self.max_prompt_length // 2
                 right_half = self.max_prompt_length - left_half
-                prompt_with_hint_ids = prompt_with_hint_ids[:left_half] + prompt_with_hint_ids[-right_half:]
+                raw_prompt_ids = raw_prompt_ids[:left_half] + raw_prompt_ids[-right_half:]
             elif self.truncation == "error":
-                raise RuntimeError(f"Prompt length {len(prompt_with_hint_ids)} is longer than {self.max_prompt_length}.")
+                raise RuntimeError(f"Prompt length {len(raw_prompt_ids)} is longer than {self.max_prompt_length}.")
 
-        row_dict["raw_prompt_ids"] = prompt_with_hint_ids
+        row_dict["raw_prompt_ids"] = raw_prompt_ids
         # encode prompts without chat template
         if self.return_raw_chat:
-            row_dict["raw_prompt"] = messages_with_hint
+            row_dict["raw_prompt"] = messages
 
         # get prompts with chat template
         if self.return_full_prompt:
-            row_dict["full_prompts"] = prompt_with_hint  # array of strings
+            row_dict["full_prompts"] = raw_prompt  # array of strings
 
         # add index for each prompt
         index = row_dict.get("extra_info", {}).get("index", 0)

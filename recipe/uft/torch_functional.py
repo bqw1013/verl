@@ -83,13 +83,88 @@ def tokenize_and_postprocess_data(
     Returns:
         Tuple of (input_ids, attention_mask) from postprocess_data
     """
-    if not (isinstance(messages, list) and len(messages) == 1 and "content" in messages[0]):
-        raise ValueError("messages must be a list containing a single dictionary with a 'content' key.")
+    if not (isinstance(messages, list) and len(messages) <= 2 and "content" in messages[0]):
+        raise ValueError("messages must be a list containing at most 2 dictionaries with a 'content' key.")
+
+    prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+    prompt_with_hint = prompt + hint_prompt
+    input_data = tokenizer(prompt_with_hint, return_tensors="pt", add_special_tokens=False)
+    input_ids = input_data["input_ids"]
+    attention_mask = input_data["attention_mask"]
+
+    if len(hint_prompt) > 0:
+        hint_data = tokenizer(hint_prompt, return_tensors="pt", add_special_tokens=False)
+        hint_ids = hint_data["input_ids"]
+        hint_length = hint_ids.shape[-1]
+        hint_mask = torch.zeros_like(attention_mask)
+        hint_mask[:, -hint_length:] = 1
+    else:
+        hint_length = 0
+        hint_ids = torch.tensor([[]], dtype=torch.long)
+        hint_mask = torch.zeros_like(input_ids)
+
+
+    assert truncation in ["left", "right", "middle", "error"]
+    assert input_ids.ndim == 2
+
+    sequence_length = input_ids.shape[-1]
+    if sequence_length < max_length:
+        input_ids = pad_sequence_to_length(
+            input_ids, max_seq_len=max_length, pad_token_id=pad_token_id, left_pad=left_pad
+        )
+        attention_mask = pad_sequence_to_length(
+            attention_mask, max_seq_len=max_length, pad_token_id=0, left_pad=left_pad
+        )
+        hint_mask = pad_sequence_to_length(
+            hint_mask, max_seq_len=max_length, pad_token_id=0, left_pad=left_pad
+        )
+    elif sequence_length > max_length:
+        if truncation == "left":
+            # actually, left truncation may not be reasonable
+            input_ids = input_ids[:, -max_length:]
+            attention_mask = attention_mask[:, -max_length:]
+            hint_mask = hint_mask[:, -max_length:]
+        elif truncation == "right":
+            input_ids = input_ids[:, :max_length]
+            attention_mask = attention_mask[:, :max_length]
+            hint_mask = hint_mask[:, :max_length]
+        elif truncation == "middle":
+            left_half = max_length // 2
+            right_half = max_length - left_half
+            input_ids = torch.cat([input_ids[:, :left_half], input_ids[:, -right_half:]], dim=-1)
+            attention_mask = torch.cat([attention_mask[:, :left_half], attention_mask[:, -right_half:]], dim=-1)
+            hint_mask = torch.cat([hint_mask[:, :left_half], hint_mask[:, -right_half:]], dim=-1)
+        elif truncation == "error":
+            raise NotImplementedError(f"{sequence_length=} is larger than {max_length=}")
+        else:
+            raise NotImplementedError(f"Unknown truncation method {truncation}")
+
+    return input_ids, attention_mask, hint_ids, hint_mask, prompt_with_hint
+
+
+def tokenize_and_postprocess_data_deprecated(
+    messages: list[dict], tokenizer: PreTrainedTokenizer, max_length: int, pad_token_id: int, left_pad=True, truncation="error", hint_prompt: str = ""
+):
+    """Tokenize text and process outputs to consistent tensor shapes.
+
+    Args:
+        messages: List of dictionaries containing message content
+        tokenizer: HuggingFace tokenizer instance
+        max_length: Target sequence length
+        pad_token_id: Padding token ID
+        left_pad: Pad left if True
+        truncation: Truncation strategy ("left"/"right"/"error")
+
+    Returns:
+        Tuple of (input_ids, attention_mask) from postprocess_data
+    """
+    if not (isinstance(messages, list) and len(messages) <= 2 and "content" in messages[0]):
+        raise ValueError("messages must be a list containing at most 2 dictionaries with a 'content' key.")
 
     input_ids_without_hint = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
     messages_with_hint = messages.copy()
-    messages_with_hint[0]["content"] = messages[0]["content"] + hint_prompt
+    messages_with_hint[-1]["content"] = messages[-1]["content"] + hint_prompt
 
     prompt = tokenizer.apply_chat_template(messages_with_hint, add_generation_prompt=True, tokenize=False)
     input_data = tokenizer(prompt, return_tensors="pt", add_special_tokens=False)

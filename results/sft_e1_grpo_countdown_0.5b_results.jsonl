@@ -1,0 +1,5 @@
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_countdown_sft_e1_grpo/step_500", "accuracy": 0.5146484375}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_countdown_sft_e1_grpo/step_400", "accuracy": 0.5}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_countdown_sft_e1_grpo/step_300", "accuracy": 0.482421875}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_countdown_sft_e1_grpo/step_200", "accuracy": 0.4267578125}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_countdown_sft_e1_grpo/step_100", "accuracy": 0.3740234375}

@@ -781,6 +781,7 @@ def run_sft(config):
     tokenizer = hf_tokenizer(local_model_path, trust_remote_code=config.model.trust_remote_code)
     train_dataset = create_sft_dataset(config.data.train_files, config.data, tokenizer)
     val_dataset = create_sft_dataset(config.data.val_files, config.data, tokenizer)
+    print(tokenizer.decode(train_dataset[0]["input_ids"], skip_special_tokens=True))
 
     trainer = FSDPSFTTrainer(
         config=config,

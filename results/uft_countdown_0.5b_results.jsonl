@@ -1,0 +1,6 @@
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_uft_countdown/step_500", "accuracy": 0.5029296875}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_uft_countdown/step_400", "accuracy": 0.478515625}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_uft_countdown/step_300", "accuracy": 0.3525390625}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_uft_countdown/step_200", "accuracy": 0.224609375}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_uft_countdown/step_100", "accuracy": 0.11328125}
+{"model": "/root/autodl-fs/models/qwen2.5_0.5b_grpo_countdown/step_500", "accuracy": 0.25}

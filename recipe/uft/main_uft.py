@@ -226,6 +226,9 @@ class TaskRunner:
             lower_prob=config.algorithm.uft.lower_prob,
             upper_prob=config.algorithm.uft.upper_prob)
 
+        print("raw_prompt: ", tokenizer.decode(train_dataset[0]["input_ids"], skip_special_tokens=True))
+        print("hint_prompt: ", tokenizer.decode(train_dataset[0]["input_ids"][train_dataset[0]["hint_mask"]==1], skip_special_tokens=True))
+
         val_dataset = create_rl_dataset(config.data.val_files, config.data, tokenizer, processor, is_train=False)
         train_sampler = create_rl_sampler(config.data, train_dataset)
 

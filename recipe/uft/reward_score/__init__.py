@@ -26,6 +26,10 @@ def uft_compute_score(
         from . import countdown
 
         res = countdown.compute_score(solution_str, ground_truth)
+    if data_source == "miromind":
+        from . import math_verify
+        
+        res = math_verify.compute_score(solution_str, ground_truth)
     else:
         raise NotImplementedError(f"Reward function is not implemented for {data_source=}")
 
