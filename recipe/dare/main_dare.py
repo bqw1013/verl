@@ -129,7 +129,7 @@ class TaskRunner:
         if config.actor_rollout_ref.actor.strategy in {"fsdp", "fsdp2"}:
             assert config.critic.strategy in {"fsdp", "fsdp2"}
             from verl.single_controller.ray import RayWorkerGroup
-            from verl.workers.fsdp_workers import ActorRolloutRefWorker, AsyncActorRolloutRefWorker
+            from recipe.dare.dare_workers import ActorRolloutRefWorker, AsyncActorRolloutRefWorker
 
             use_legacy_worker_impl = config.trainer.get("use_legacy_worker_impl", "auto")
             if use_legacy_worker_impl in ["auto", "enable"]:

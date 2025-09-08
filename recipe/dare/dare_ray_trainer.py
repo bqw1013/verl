@@ -523,40 +523,8 @@ class RayDareTrainer(RayPPOTrainer):
                         # 3. determine relay samples
                         relay_samples_mask = dare_core.determine_relay_samples(
                             reward_tensor.sum(dim=-1),batch.non_tensor_batch["uid"])
-                        relay_samples_prompt = batch.batch["relay_prompts"][relay_samples_mask]
+                        
                         batch.batch["relay_samples_mask"] = relay_samples_mask
-
-                        print("[relay_samples_prompt]\n", self.tokenizer.decode(relay_samples_prompt[0], skip_special_tokens=True))
-
-                        # 4. generate relay responses
-                        max_tokens = self.config.data.max_response_length - batch.batch["relay_points"][relay_samples_mask] - 1
-                        relay_samples_outputs = self.rollout_service.generate(
-                            relay_samples_prompt,
-                            max_tokens=max_tokens, 
-                            num_proc=rollout_service_config.num_proc,
-                            pad_token_id=self.tokenizer.pad_token_id,
-                            temperature=rollout_service_config.temperature,
-                            top_p=rollout_service_config.top_p,
-                        )
-
-                        # 5. compute relay reward
-                        relay_reward = dare_core.compute_relay_reward(
-                            data_source=batch.non_tensor_batch["data_source"][relay_samples_mask],
-                            solution_str=relay_samples_outputs["text"],
-                            ground_truth=[item["ground_truth"] for item in batch.non_tensor_batch["reward_model"][relay_samples_mask]],
-                            extra_info=batch.non_tensor_batch["extra_info"][relay_samples_mask],
-                            compute_score=self.reward_fn.compute_score,
-                        )
-
-                        relay_reward = torch.tensor(relay_reward, dtype=reward_tensor.dtype, device=reward_tensor.device)
-
-                        batch = dare_core.update_batch(
-                            batch=batch,
-                            relay_responses=relay_samples_outputs["token_ids"],
-                            relay_logprobs=relay_samples_outputs["logprobs"],
-                            relay_reward=relay_reward,
-                            tokenizer=self.tokenizer,
-                        )
 
                         metrics.update(
                             {
@@ -565,12 +533,59 @@ class RayDareTrainer(RayPPOTrainer):
                                 "relay/relay_points_min": batch.batch["relay_points"].float().min().detach().item(),
                                 "relay/relay_samples_prompt_num": relay_samples_mask.sum().detach().item(),
                                 "relay/relay_samples_prompt_ratio": relay_samples_mask.sum().detach().item() / len(relay_samples_mask),
-                                "relay/relay_reward_positive_num": relay_reward.sum().detach().item(),
-                                "relay/relay_reward_positive_ratio": relay_reward.sum().detach().item() / len(relay_reward),
-                                "relay/token_level_scores_before_sum": batch.batch["raw_token_level_scores"].sum().detach().item(),
-                                "relay/token_level_scores_after_sum": batch.batch["token_level_scores"].sum().detach().item(),
                             }
                         )
+                        
+                        if relay_samples_mask.any():
+                            relay_samples_prompt = batch.batch["relay_prompts"][relay_samples_mask]
+
+                            print("[relay_samples_prompt]\n", self.tokenizer.decode(relay_samples_prompt[0], skip_special_tokens=True))
+
+                            # 4. generate relay responses
+                            max_tokens = self.config.data.max_response_length - batch.batch["relay_points"][relay_samples_mask] - 1
+                            relay_samples_outputs = self.rollout_service.generate(
+                                relay_samples_prompt,
+                                max_tokens=max_tokens, 
+                                num_proc=rollout_service_config.num_proc,
+                                pad_token_id=self.tokenizer.pad_token_id,
+                                temperature=rollout_service_config.temperature,
+                                top_p=rollout_service_config.top_p,
+                            )
+
+                            # 5. compute relay reward
+                            relay_reward = dare_core.compute_relay_reward(
+                                data_source=batch.non_tensor_batch["data_source"][relay_samples_mask],
+                                solution_str=relay_samples_outputs["text"],
+                                ground_truth=[item["ground_truth"] for item in batch.non_tensor_batch["reward_model"][relay_samples_mask]],
+                                extra_info=batch.non_tensor_batch["extra_info"][relay_samples_mask],
+                                compute_score=self.reward_fn.compute_score,
+                            )
+
+                            relay_reward = torch.tensor(relay_reward, dtype=reward_tensor.dtype, device=reward_tensor.device)
+                            metrics.update(
+                                {
+                                    "relay/rollout_success_ration": relay_samples_outputs["status"].count("success") / len(relay_samples_outputs["status"]),
+                                    "relay/relay_reward_positive_num": relay_reward.sum().detach().item(),
+                                    "relay/relay_reward_positive_ratio": relay_reward.sum().detach().item() / len(relay_reward),
+                                }
+                            )
+                            
+                            # 6. update batch
+                            if relay_reward.any():
+                                batch = dare_core.update_batch(
+                                    batch=batch,
+                                    relay_responses=relay_samples_outputs["token_ids"],
+                                    relay_logprobs=relay_samples_outputs["logprobs"],
+                                    relay_reward=relay_reward,
+                                    tokenizer=self.tokenizer,
+                                )
+
+                                metrics.update(
+                                    {
+                                        "relay/token_level_scores_before_sum": batch.batch["raw_token_level_scores"].sum().detach().item(),
+                                        "relay/token_level_scores_after_sum": batch.batch["token_level_scores"].sum().detach().item(),
+                                    }
+                                )
                     
                     if self.use_reference_policy:
                         # compute reference log_prob
