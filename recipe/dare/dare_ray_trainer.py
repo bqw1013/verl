@@ -63,7 +63,7 @@ from verl.utils.tracking import ValidationGenerationsLogger
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 
 import recipe.dare.dare_core as dare_core
-from recipe.dare.service_rollout import RemoteServiceRollout
+from recipe.dare.service_rollout import AsyncRemoteServiceRollout
 
 WorkerType = type[Worker]
 
@@ -320,7 +320,7 @@ class RayDareTrainer(RayPPOTrainer):
 
         rollout_service_config = self.config.actor_rollout_ref.rollout.service
 
-        self.rollout_service = RemoteServiceRollout(
+        self.rollout_service = AsyncRemoteServiceRollout(
             base_url=rollout_service_config.base_url,
             model_name=rollout_service_config.model_name,
             api_key=rollout_service_config.api_key,
@@ -511,6 +511,7 @@ class RayDareTrainer(RayPPOTrainer):
                             self.total_relay_steps,
                         )
                         assert all(batch.batch["relay_points"] < batch.batch["response_mask"].sum(dim=-1)) is True
+                        batch.batch["relay_points"] = batch.batch["relay_points"] * 0
 
                         # 2.construct relay prompts by combining prompts and responses
                         batch.batch["relay_prompts"] = dare_core.combine_prompt_response_by_relay_point(
@@ -545,9 +546,9 @@ class RayDareTrainer(RayPPOTrainer):
                             max_tokens = self.config.data.max_response_length - batch.batch["relay_points"][relay_samples_mask] - 1
                             relay_samples_outputs = self.rollout_service.generate(
                                 relay_samples_prompt,
-                                max_tokens=max_tokens, 
-                                num_proc=rollout_service_config.num_proc,
+                                max_tokens=max_tokens.tolist(), 
                                 pad_token_id=self.tokenizer.pad_token_id,
+                                concurrency_limit=rollout_service_config.concurrency_limit,
                                 temperature=rollout_service_config.temperature,
                                 top_p=rollout_service_config.top_p,
                             )

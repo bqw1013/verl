@@ -226,4 +226,4 @@ service:
 
   top_p: 0.9
 
-  num_proc: 32
+  concurrency_limit: 32
