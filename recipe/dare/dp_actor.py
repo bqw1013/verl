@@ -36,6 +36,8 @@ from verl.utils.torch_functional import logprobs_from_logits
 from verl.utils.ulysses import gather_outputs_and_unpad, ulysses_pad, ulysses_pad_and_slice_inputs
 from verl.workers.actor import BasePPOActor
 
+from .core_algos import compute_dare_policy_loss
+
 if is_cuda_available:
     from flash_attn.bert_padding import index_first_axis, pad_input, rearrange, unpad_input
 elif is_npu_available:
@@ -365,6 +367,7 @@ class DataParallelPPOActor(BasePPOActor):
             "advantages",
             "relay_points",
             "relay_samples_mask",
+            "token_level_scores",
         ]
         if self.config.use_kl_loss:
             select_keys.append("ref_log_prob")
@@ -454,12 +457,16 @@ class DataParallelPPOActor(BasePPOActor):
                                     }
                                 )
                             append_to_dict(metrics, micro_batch_metrics)
-
-                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = compute_policy_loss(
+                        # if relay_samples_mask.any():
+                        #     breakpoint()
+                        
+                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = compute_dare_policy_loss(
                             old_log_prob=old_log_prob,
                             log_prob=log_prob,
                             advantages=advantages,
                             response_mask=response_mask,
+                            relay_points=relay_points,
+                            relay_samples_mask=relay_samples_mask,
                             cliprange=clip_ratio,
                             cliprange_low=clip_ratio_low,
                             cliprange_high=clip_ratio_high,

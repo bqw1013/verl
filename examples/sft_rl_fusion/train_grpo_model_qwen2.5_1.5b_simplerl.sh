@@ -39,7 +39,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='off_policy' \
-    trainer.experiment_name='grpo_1.5b' \
+    trainer.experiment_name='grpo_1.5b_test' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=60 \

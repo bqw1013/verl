@@ -1,3 +1,4 @@
+# -*- coding:utf-8 -*-
 # Copyright 2024 Bytedance Ltd. and/or its affiliates
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from threading import Thread
+from queue import Queue
 
 try:
     from math_verify.errors import TimeoutException
@@ -31,9 +35,9 @@ def compute_score(model_output: str, ground_truth: str, timeout_score: float = 0
     ground_truth_boxed = "\\boxed{" + ground_truth + "}"
     try:
         ret_score, _ = verify_func([ground_truth_boxed], [model_output])
-    except Exception:
-        pass
     except TimeoutException:
         ret_score = timeout_score
+    except Exception:
+        pass
 
     return ret_score

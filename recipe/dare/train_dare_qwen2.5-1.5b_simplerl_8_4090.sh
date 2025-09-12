@@ -1,6 +1,6 @@
 set -x
 
-export CUDA_VISIBLE_DEVICES=0,1
+# export CUDA_VISIBLE_DEVICES=0,1
 
 export VLLM_ATTENTION_BACKEND=XFORMERS
 HOME=/root/autodl-tmp/code/verl
@@ -17,7 +17,7 @@ python3 -m recipe.dare.main_dare \
     actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2.5-1.5B \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.model.use_liger=True \
+    actor_rollout_ref.model.use_liger=False \
     actor_rollout_ref.actor.ppo_mini_batch_size=256 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=16 \
     actor_rollout_ref.actor.use_kl_loss=True \
@@ -38,7 +38,7 @@ python3 -m recipe.dare.main_dare \
     actor_rollout_ref.rollout.service.api_key=none \
     actor_rollout_ref.rollout.service.temperature=1.0 \
     actor_rollout_ref.rollout.service.top_p=0.8 \
-    actor_rollout_ref.rollout.service.num_proc=512 \
+    actor_rollout_ref.rollout.service.concurrency_limit=512 \
     actor_rollout_ref.rollout.calculate_log_probs=True \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=32 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \

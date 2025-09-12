@@ -147,8 +147,8 @@ def sample_relay_point(entropies: torch.Tensor,
 
     final_probs = torch.where(
         sum_scores > 1e-9,
+        final_scores / sum_scores,
         p_global_batch,
-        final_scores / sum_scores
     )
     
     sampled_indices = torch.multinomial(final_probs, num_samples=1).squeeze(-1)
@@ -192,12 +192,12 @@ def combine_prompt_response_by_relay_point(
     return relay_prompts
 
 
-def determine_relay_samples(rewards: torch.Tensor, uid: List[int], relay_sample_fn: Callable = None):
-    if rewards.shape[0] != len(uid):
+def determine_relay_samples(rewards: torch.Tensor, uids: List[int], relay_sample_fn: Callable = None):
+    if rewards.shape[0] != len(uids):
         raise ValueError("rewards and uid must have the same length")
     
     id2index_reward = defaultdict(list)
-    for index, uid in enumerate(uid):
+    for index, uid in enumerate(uids):
         id2index_reward[uid].append((index, rewards[index]))
     
     sampled_indexs = []
@@ -206,7 +206,7 @@ def determine_relay_samples(rewards: torch.Tensor, uid: List[int], relay_sample_
         group_rewards = [index_reward[1] for index_reward in index_rewards]
 
         if all(reward == 0 for reward in group_rewards):
-            num_to_sampling = max(len(group_indexs), 1)
+            num_to_sampling = max(int(len(group_indexs) / 2), 1)
             sampled_indexs.extend(random.sample(group_indexs, num_to_sampling))
 
     sampled_indexs.sort()
@@ -271,7 +271,7 @@ def update_batch(
         mixed_logprob = torch.cat([raw_old_logprob[:relay_point], relay_logprob])
         mixed_responses.append(mixed_response)
         mixed_logprobs.append(mixed_logprob)
-    assert all([len(mixed_responses)==len(mixed_logprobs) for i in range(len(mixed_responses))]), "mixed_responses and mixed_logprobs must have the same length"
+    assert all([len(mixed_responses[i])==len(mixed_logprobs[i]) for i in range(len(mixed_responses))]), "mixed_responses and mixed_logprobs must have the same length"
     
     # pad mixed_responses and mixed_logprobs
     max_response_length = batch.batch["responses"].shape[1]
