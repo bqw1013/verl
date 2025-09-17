@@ -511,8 +511,8 @@ class RayDareTrainer(RayPPOTrainer):
                             self.total_relay_steps,
                         )
                         assert all(batch.batch["relay_points"] < batch.batch["response_mask"].sum(dim=-1)) is True
-                        if self.global_steps <= 1:
-                            batch.batch["relay_points"] = batch.batch["relay_points"] * 0
+                        # if self.global_steps <= 1:
+                        #     batch.batch["relay_points"] = batch.batch["relay_points"] * 0
 
                         # 2.construct relay prompts by combining prompts and responses
                         batch.batch["relay_prompts"] = dare_core.combine_prompt_response_by_relay_point(
@@ -527,7 +527,7 @@ class RayDareTrainer(RayPPOTrainer):
                             reward_tensor.sum(dim=-1),batch.non_tensor_batch["uid"])
                         
                         batch.batch["relay_samples_mask"] = relay_samples_mask
-                        # if self.global_steps <= 20:
+                        # if self.global_steps <= 10:
                         #     batch.batch["relay_samples_mask"].fill_(False)
 
                         metrics.update(
@@ -540,7 +540,7 @@ class RayDareTrainer(RayPPOTrainer):
                             }
                         )
                         
-                        if relay_samples_mask.any():
+                        if relay_samples_mask.any() and self.global_steps <= self.total_relay_steps:
                             relay_samples_prompt = batch.batch["relay_prompts"][relay_samples_mask]
 
                             print("[relay_samples_prompt]\n", self.tokenizer.decode(relay_samples_prompt[0], skip_special_tokens=True))

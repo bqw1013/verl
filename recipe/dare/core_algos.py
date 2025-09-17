@@ -1,3 +1,12 @@
+# -*- coding:utf-8 -*-
+"""
+Author: Qiangwei Bai
+Date: 2025-09-12 22:28:41
+LastEditTime: 2025-09-16 19:59:03
+LastEditors: Qiangwei Bai
+FilePath: /verl/recipe/dare/core_algos.py
+Description: 
+"""
 import torch
 import verl.utils.torch_functional as verl_F
 from verl.trainer.ppo.core_algos import agg_loss
@@ -8,8 +17,8 @@ def compute_dare_policy_loss(
     log_prob,
     advantages,
     response_mask,
-    relay_points,
-    relay_samples_mask,
+    relay_on_policy_mask,
+    relay_off_policy_mask,
     cliprange=None,
     cliprange_low=None,
     cliprange_high=None,
@@ -46,24 +55,27 @@ def compute_dare_policy_loss(
         + f" but get the value: {clip_ratio_c}."
     )
 
-    # max_response_length = log_prob.shape[-1]
-    # relay_points[~relay_samples_mask] = max_response_length
-    # relay_points = relay_points[relay_samples_mask]
-                        # relay_log_prob = log_prob[relay_samples_mask]
-                        # relay_old_log_prob = old_log_prob[relay_samples_mask]
-                        # relay_responses_mask = response_mask[relay_samples_mask].bool()
-
-                        # max_response_length = relay_responses_mask.shape[1]
-                        # relay_on_policy_mask = (torch.arange(max_response_length) < relay_points.unsqueeze(1).cpu()).to(relay_responses_mask.device)
-                        # relay_on_policy_mask = relay_on_policy_mask & relay_responses_mask
-                        # relay_off_policy_mask = ~relay_on_policy_mask & relay_responses_mask
-
     negative_approx_kl = log_prob - old_log_prob
     # Clamp negative_approx_kl for stability
     negative_approx_kl = torch.clamp(negative_approx_kl, min=-20.0, max=20.0)
     ratio = torch.exp(negative_approx_kl)
+
+    # dare ratio
+    relay_metrics = {}
+    off_ratio = ratio / (ratio + 0.1)
+    ratio = torch.where(relay_off_policy_mask.bool(), off_ratio, ratio)
+    off_token_ratio = ratio[relay_off_policy_mask.bool()]
+    on_token_ratio = ratio[relay_on_policy_mask.bool()]
+    if relay_on_policy_mask.any():
+        relay_metrics["relay/max_on_policy_ratio"] = on_token_ratio.max().item()
+        relay_metrics["relay/min_on_policy_ratio"] = on_token_ratio.min().item()
+        relay_metrics["relay/mean_on_policy_ratio"] = on_token_ratio.mean().item()
+    if relay_off_policy_mask.any():
+        relay_metrics["relay/max_off_policy_ratio"] = off_token_ratio.max().item()
+        relay_metrics["relay/min_off_policy_ratio"] = off_token_ratio.min().item()
+        relay_metrics["relay/mean_off_policy_ratio"] = off_token_ratio.mean().item()
+
     ppo_kl = verl_F.masked_mean(-negative_approx_kl, response_mask)
-    # 调整ratio
 
     pg_losses1 = -advantages * ratio
     if cliprange_low is None:
@@ -84,7 +96,13 @@ def compute_dare_policy_loss(
         torch.gt(clip_pg_losses1, pg_losses3) * (advantages < 0).float(), response_mask
     )
 
+    if relay_off_policy_mask.any():
+        off_policy_pg_clipfrac = verl_F.masked_mean(torch.gt(pg_losses2, pg_losses1).float(), relay_off_policy_mask)
+        off_policy_pg_clipfrac_lower = verl_F.masked_mean(torch.gt(clip_pg_losses1, pg_losses3) * (advantages < 0).float(), relay_off_policy_mask)
+        relay_metrics["relay/off_policy_pg_clipfrac"] = off_policy_pg_clipfrac.item()
+        relay_metrics["relay/off_policy_pg_clipfrac_lower"] = off_policy_pg_clipfrac_lower.item()
+
     pg_losses = torch.where(advantages < 0, clip_pg_losses2, clip_pg_losses1)
     pg_loss = agg_loss(loss_mat=pg_losses, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
 
-    return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
+    return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower, relay_metrics

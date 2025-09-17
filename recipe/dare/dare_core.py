@@ -124,12 +124,13 @@ def get_local_attraction(entropies: torch.Tensor, response_mask: torch.Tensor, t
     return torch.softmax(scaled_entropy, dim=-1)
 
 
-def sample_relay_point(entropies: torch.Tensor, 
-                             response_mask: torch.Tensor, 
-                             t_train: int, 
-                             total_decay_steps: int,
-                             std_ratio: float = 0.1,
-                             temperature: float = 1.0) -> torch.Tensor:
+def sample_relay_point(
+    entropies: torch.Tensor,
+    response_mask: torch.Tensor, 
+    t_train: int, 
+    total_decay_steps: int,
+    std_ratio: float = 0.1,
+    temperature: float = 1.0) -> torch.Tensor:
     """
     Samples a relay point for a batch of trajectories.
     """
@@ -138,7 +139,12 @@ def sample_relay_point(entropies: torch.Tensor,
     
     device = entropies.device
 
-    alpha_t = cosine_annealing(t_train, total_decay_steps)
+    alpha_t = cosine_annealing(
+        t_train, 
+        total_decay_steps,
+        initial_alpha=1.0,
+        final_alpha=0.5,
+    )
     p_global_batch = get_global_preference(response_mask, alpha_t, std_ratio).to(device)
     p_local_batch = get_local_attraction(entropies, response_mask, temperature)
     
@@ -153,7 +159,7 @@ def sample_relay_point(entropies: torch.Tensor,
     
     sampled_indices = torch.multinomial(final_probs, num_samples=1).squeeze(-1)
     relay_points = sampled_indices
-    # print(f"t_train: {t_train}, alpha_t: {alpha_t}, global_prefs: {torch.argmax(p_global_batch, dim=1).float().mean()}, relay_points: {relay_points.float().mean()}")
+    print(f"t_train: {t_train}, alpha_t: {alpha_t}, global_prefs: {torch.argmax(p_global_batch, dim=1).float().mean()}, relay_points: {relay_points.float().mean()}")
     return relay_points
 
 

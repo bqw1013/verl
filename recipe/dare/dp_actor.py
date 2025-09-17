@@ -426,54 +426,30 @@ class DataParallelPPOActor(BasePPOActor):
                     loss_mode = self.config.policy_loss.get("loss_mode", "vanilla")
 
                     if self.config.policy_loss.loss_mode == "vanilla":
-                        relay_points = relay_points[relay_samples_mask]
-                        relay_log_prob = log_prob[relay_samples_mask]
-                        relay_old_log_prob = old_log_prob[relay_samples_mask]
-                        relay_responses_mask = response_mask[relay_samples_mask].bool()
-
-                        max_response_length = relay_responses_mask.shape[1]
-                        relay_on_policy_mask = (torch.arange(max_response_length) < relay_points.unsqueeze(1).cpu()).to(relay_responses_mask.device)
-                        relay_on_policy_mask = relay_on_policy_mask & relay_responses_mask
-                        relay_off_policy_mask = ~relay_on_policy_mask & relay_responses_mask
-
-                        if relay_samples_mask.any():
-                            importance_ratio = torch.exp(relay_log_prob-relay_old_log_prob)
-                            on_policy_ratio = importance_ratio[relay_on_policy_mask]
-                            off_policy_ratio = importance_ratio[relay_off_policy_mask]
-                            if relay_on_policy_mask.any():
-                                micro_batch_metrics.update(
-                                    {
-                                        "relay/max_on_policy_ratio": on_policy_ratio.max().item(),
-                                        "relay/min_on_policy_ratio": on_policy_ratio.min().item(),
-                                        "relay/mean_on_policy_ratio": on_policy_ratio.mean().item(),
-                                    }
-                                )
-                            if relay_off_policy_mask.any():
-                                micro_batch_metrics.update(
-                                    {
-                                        "relay/max_off_policy_ratio": off_policy_ratio.max().item(),
-                                        "relay/min_off_policy_ratio": off_policy_ratio.min().item(),
-                                        "relay/mean_off_policy_ratio": off_policy_ratio.mean().item(),
-                                    }
-                                )
-                            append_to_dict(metrics, micro_batch_metrics)
+                        max_response_length = log_prob.shape[-1]
+                        relay_points[~relay_samples_mask] = max_response_length
+                        relay_on_policy_mask = (torch.arange(max_response_length) < relay_points.unsqueeze(1).cpu()).to(response_mask.device)
+                        relay_off_policy_mask = ~relay_on_policy_mask
+                        relay_on_policy_mask = relay_on_policy_mask & response_mask
+                        relay_off_policy_mask = relay_off_policy_mask & response_mask
+                        
                         # if relay_samples_mask.any():
                         #     breakpoint()
                         
-                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = compute_dare_policy_loss(
+                        pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower, relay_metrics = compute_dare_policy_loss(
                             old_log_prob=old_log_prob,
                             log_prob=log_prob,
                             advantages=advantages,
                             response_mask=response_mask,
-                            relay_points=relay_points,
-                            relay_samples_mask=relay_samples_mask,
+                            relay_on_policy_mask=relay_on_policy_mask,
+                            relay_off_policy_mask=relay_off_policy_mask,
                             cliprange=clip_ratio,
                             cliprange_low=clip_ratio_low,
                             cliprange_high=clip_ratio_high,
                             clip_ratio_c=clip_ratio_c,
                             loss_agg_mode=loss_agg_mode,
                         )
-
+                        append_to_dict(metrics, relay_metrics)
                     else:
                         policy_loss_fn = get_policy_loss_fn(loss_mode)
                         pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower = policy_loss_fn(
