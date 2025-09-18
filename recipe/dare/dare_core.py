@@ -159,7 +159,7 @@ def sample_relay_point(
     
     sampled_indices = torch.multinomial(final_probs, num_samples=1).squeeze(-1)
     relay_points = sampled_indices
-    print(f"t_train: {t_train}, alpha_t: {alpha_t}, global_prefs: {torch.argmax(p_global_batch, dim=1).float().mean()}, relay_points: {relay_points.float().mean()}")
+    # print(f"t_train: {t_train}, alpha_t: {alpha_t}, global_prefs: {torch.argmax(p_global_batch, dim=1).float().mean()}, relay_points: {relay_points.float().mean()}")
     return relay_points
 
 

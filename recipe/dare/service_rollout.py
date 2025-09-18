@@ -245,7 +245,7 @@ class RemoteServiceRollout:
         return dataset.to_dict()
 
 def test_service_rollout():
-    tokenizer = AutoTokenizer.from_pretrained("/root/autodl-fs/models/Qwen/Qwen2.5-Math-7B-Instruct")
+    tokenizer = AutoTokenizer.from_pretrained("/root/autodl-fs/models/Qwen/Qwen2.5-7B-Instruct")
     prompt = "Hello, how are you?"
     prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], tokenize=True, add_generation_prompt=True)
     prompt1 = prompt + tokenizer.encode("Fine! Thanks for asking.")
@@ -253,13 +253,13 @@ def test_service_rollout():
     prompts = [prompt1, prompt2] * 500
     service_rollout = RemoteServiceRollout(
         base_url="https://u66551-baab-24341aca.cqa1.seetacloud.com:8443/v1",
-        model_name="Qwen2.5-Math-7B-Instruct",
+        model_name="Qwen2.5-7B-Instruct",
     )
     rollouts = service_rollout.generate(prompts, num_proc=64, temperature=0, max_tokens=[2048] * len(prompts), top_p=1.0)
     pass
 
 def test_async_service_rollout():
-    tokenizer = AutoTokenizer.from_pretrained("/root/autodl-fs/models/Qwen/Qwen2.5-Math-7B-Instruct")
+    tokenizer = AutoTokenizer.from_pretrained("/root/autodl-fs/models/Qwen/Qwen2.5-7B-Instruct")
     prompt = "Hello, how are you?"
     prompt = tokenizer.apply_chat_template([{"role": "user", "content": prompt}], tokenize=True, add_generation_prompt=True)
     prompt1 = prompt + tokenizer.encode("Fine! Thanks for asking.")
@@ -267,15 +267,47 @@ def test_async_service_rollout():
     prompts = [prompt1, prompt2] * 500
     service_rollout = AsyncRemoteServiceRollout(
         base_url="https://u66551-baab-24341aca.cqa1.seetacloud.com:8443/v1",
-        model_name="Qwen2.5-Math-7B-Instruct",
+        model_name="Qwen2.5-7B-Instruct",
     )
     rollouts = service_rollout.generate(prompts, max_tokens=[2048] * len(prompts), temperature=0, top_p=1.0, concurrency_limit=512)
     pass
 
+tokenizer = AutoTokenizer.from_pretrained("/root/autodl-fs/models/Qwen/Qwen2.5-7B-Instruct")
+
+def test():
+    prompts = [151644,   8948,    198,   2610,    525,    264,  10950,  17847,
+            13, 151645,    198, 151644,    872,    198,   5501,   2874,   3019,
+           553,   3019,     11,    323,   2182,    697,   1590,   4226,   2878,
+          1124,  79075,   6257,    624,     32,  21495,    304,    264,  80715,
+         16184,  11031,    702,  17228,    320,     20,     11,    481,     17,
+           701,    320,     16,     15,     11,    220,     20,      8,    323,
+           320,     20,     11,    220,     20,    568,   2585,   1657,   9334,
+          8153,    525,    304,    279,   3082,    315,    279,  21495,     30,
+         17399,    697,   4226,    438,    264,  12122,    311,    279,  23480,
+         55666,     13, 151645,    198, 151644,  77091,    198,   5501,   2874,
+          3019,    553,   3019,     11,    323,   2182,    697,   1590,   4226,
+          2878,   1124,  79075,   6257,    624,     32,  21495,    702,    264,
+          2331,    315,    220,     17,     19,   9961,    323,    264,   2608,
+           315,    220,     16,     23,   9961,     13,   1416,    220,     21,
+         19766,     11,  63828,   3232,    307,  11202,  10747,    323,  18308,
+         63828,   1948,    279,   1378,  23092,     11,    525,  67765,   1526,
+           279,   1909,    315,    279,  21495,     11,   1128,    374,    279,
+          2790,   3084,    315,    279,  19766,     30,   7036,     25,    279,
+          2374,    315,    279,  19766,   1969,    387,   2686,   1091,    279,
+          2331,    315,    279,  21495,    304,   1973,    311,   4946,   1526,
+           279,  21495]
+    service_rollout = AsyncRemoteServiceRollout(
+        base_url="https://u66551-baab-24341aca.cqa1.seetacloud.com:8443/v1",
+        model_name="Qwen2.5-7B-Instruct",
+    )
+    x = service_rollout.generate([prompts], max_tokens=[2048], temperature=1.0, top_p=0.8, concurrency_limit=512)
+    pass
+
 if __name__ == "__main__":
-    import time
-    start_time = time.time()
-    test_async_service_rollout()
-    end_time = time.time()
-    print(f"Time taken: {end_time - start_time} seconds")
+    # import time
+    # start_time = time.time()
+    # test_async_service_rollout()
+    # end_time = time.time()
+    # print(f"Time taken: {end_time - start_time} seconds")
+    test()
     pass

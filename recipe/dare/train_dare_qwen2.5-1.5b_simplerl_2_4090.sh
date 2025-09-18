@@ -34,7 +34,7 @@ python3 -m recipe.dare.main_dare \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
     actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.service.base_url=https://u66551-baab-24341aca.cqa1.seetacloud.com:8443/v1 \
-    actor_rollout_ref.rollout.service.model_name=Qwen2.5-Math-7B-Instruct \
+    actor_rollout_ref.rollout.service.model_name=Qwen2.5-7B-Instruct \
     actor_rollout_ref.rollout.service.api_key=none \
     actor_rollout_ref.rollout.service.temperature=1.0 \
     actor_rollout_ref.rollout.service.top_p=0.8 \
