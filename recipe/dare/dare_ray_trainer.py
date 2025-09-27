@@ -523,12 +523,12 @@ class RayDareTrainer(RayPPOTrainer):
                         )
 
                         # 3. determine relay samples
-                        relay_samples_mask = dare_core.determine_relay_samples(
+                        relay_samples_mask, sampled_succ_count, sampled_fail_count = dare_core.determine_relay_samples(
                             reward_tensor.sum(dim=-1),batch.non_tensor_batch["uid"])
                         
                         batch.batch["relay_samples_mask"] = relay_samples_mask
-                        # if self.global_steps <= 10:
-                        #     batch.batch["relay_samples_mask"].fill_(False)
+                        if self.global_steps <= 20:
+                            batch.batch["relay_samples_mask"].fill_(False)
 
                         metrics.update(
                             {
@@ -536,10 +536,12 @@ class RayDareTrainer(RayPPOTrainer):
                                 "relay/relay_points_max": batch.batch["relay_points"].float().max().detach().item(),
                                 "relay/relay_points_min": batch.batch["relay_points"].float().min().detach().item(),
                                 "relay/relay_samples_prompt_num": relay_samples_mask.sum().detach().item(),
+                                "relay/relay_samples_prompt_succ_num": sampled_succ_count,
+                                "relay/relay_samples_prompt_fail_num": sampled_fail_count,
                                 "relay/relay_samples_prompt_ratio": relay_samples_mask.sum().detach().item() / len(relay_samples_mask),
                             }
                         )
-                        
+
                         if relay_samples_mask.any() and self.global_steps <= self.total_relay_steps:
                             relay_samples_prompt = batch.batch["relay_prompts"][relay_samples_mask]
 
