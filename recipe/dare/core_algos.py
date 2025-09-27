@@ -59,18 +59,23 @@ def compute_dare_policy_loss(
     # Clamp negative_approx_kl for stability
     negative_approx_kl = torch.clamp(negative_approx_kl, min=-20.0, max=20.0)
     ratio = torch.exp(negative_approx_kl)
+    raw_ratio = ratio.clone()
 
     # dare ratio
     relay_metrics = {}
     off_ratio = ratio / (ratio + 0.1)
     ratio = torch.where(relay_off_policy_mask.bool(), off_ratio, ratio)
     off_token_ratio = ratio[relay_off_policy_mask.bool()]
+    raw_off_token_ratio = raw_ratio[relay_off_policy_mask.bool()]
     on_token_ratio = ratio[relay_on_policy_mask.bool()]
     if relay_on_policy_mask.any():
         relay_metrics["relay/max_on_policy_ratio"] = on_token_ratio.max().item()
         relay_metrics["relay/min_on_policy_ratio"] = on_token_ratio.min().item()
         relay_metrics["relay/mean_on_policy_ratio"] = on_token_ratio.mean().item()
     if relay_off_policy_mask.any():
+        relay_metrics["relay/max_raw_off_policy_ratio"] = raw_off_token_ratio.max().item()
+        relay_metrics["relay/min_raw_off_policy_ratio"] = raw_off_token_ratio.min().item()
+        relay_metrics["relay/mean_raw_off_policy_ratio"] = raw_off_token_ratio.mean().item()
         relay_metrics["relay/max_off_policy_ratio"] = off_token_ratio.max().item()
         relay_metrics["relay/min_off_policy_ratio"] = off_token_ratio.min().item()
         relay_metrics["relay/mean_off_policy_ratio"] = off_token_ratio.mean().item()
