@@ -201,11 +201,9 @@ trainer:
   total_epochs: 30
 
   # Total training steps (can be set explicitly or derived from epochs)
-  total_training_steps: null
+  total_training_steps: nulla
 
-  total_relay_steps: null
-
-  total_relay_ratio: 0.5
+  relay_schedule: null
 
   # The steps that will be profiled. null means no profiling. null or [1,2,5,...]
   profile_steps: null

@@ -431,10 +431,7 @@ class DataParallelPPOActor(BasePPOActor):
                         relay_on_policy_mask = (torch.arange(max_response_length) < relay_points.unsqueeze(1).cpu()).to(response_mask.device)
                         relay_off_policy_mask = ~relay_on_policy_mask
                         relay_on_policy_mask = relay_on_policy_mask & response_mask
-                        relay_off_policy_mask = relay_off_policy_mask & response_mask
-                        
-                        # if relay_samples_mask.any():
-                        #     breakpoint()
+                        relay_off_policy_mask = relay_off_policy_mask & response_mask         
                         
                         pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower, relay_metrics = compute_dare_policy_loss(
                             old_log_prob=old_log_prob,

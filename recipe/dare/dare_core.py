@@ -455,5 +455,5 @@ def test_allocate_relay_budget():
 
 if __name__ == "__main__":
     # test_determine_relay_count()
-    test_allocate_relay_budget()
+    # test_allocate_relay_budget()
     pass
