@@ -25,7 +25,7 @@ python3 -m recipe.dare.main_dare \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.entropy_coeff=0.001 \
     actor_rollout_ref.actor.clip_ratio_low=0.2 \
-    actor_rollout_ref.actor.clip_ratio_high=0.28 \
+    actor_rollout_ref.actor.clip_ratio_high=0.2 \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_fused_kernels=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
@@ -54,5 +54,5 @@ python3 -m recipe.dare.main_dare \
     trainer.save_freq=80 \
     trainer.test_freq=5 \
     trainer.total_training_steps=600 \
-    trainer.relay_schedule="'[(51, 150, 1.0, 0.0), (201, 300, 1.0, 0.0), (351, 450, 1.0, 0.0)]'" \
+    trainer.relay_schedule="'[(51, 200, 0.8, 0.1), (301, 450, 0.8, 0.1)]'" \
     trainer.val_before_train=False

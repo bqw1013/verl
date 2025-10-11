@@ -516,6 +516,8 @@ class RayDareTrainer(RayPPOTrainer):
                                 batch.batch["response_mask"],
                                 self.global_steps - start_step,
                                 end_step - start_step,
+                                initial_alpha=initial_alpha,
+                                final_alpha=final_alpha,
                             )
                             assert all(batch.batch["relay_points"] < batch.batch["response_mask"].sum(dim=-1)) is True
                             # if self.global_steps <= 1:
@@ -600,6 +602,8 @@ class RayDareTrainer(RayPPOTrainer):
                                             "relay/token_level_scores_after_sum": batch.batch["token_level_scores"].sum().detach().item(),
                                         }
                                     )
+                                else:
+                                    batch.batch["relay_samples_mask"].fill_(False)
                     
                     if self.use_reference_policy:
                         # compute reference log_prob

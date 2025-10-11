@@ -114,6 +114,10 @@ def get_local_attraction(entropies: torch.Tensor, response_mask: torch.Tensor, t
     if response_mask.dtype != torch.bool:
         response_mask = response_mask.bool()
 
+    threshold = torch.quantile(entropies.float(), 0.9)
+    threshold = min(threshold, 1.0)
+    entropies[entropies >= threshold] = 0.0
+
     scaled_entropy = entropies / tau
     scaled_entropy = torch.where(
         response_mask,
@@ -129,6 +133,8 @@ def sample_relay_point(
     response_mask: torch.Tensor, 
     t_train: int, 
     total_decay_steps: int,
+    initial_alpha: float = 1.0,
+    final_alpha: float = 0.0,
     std_ratio: float = 0.1,
     temperature: float = 1.0) -> torch.Tensor:
     """
@@ -142,8 +148,8 @@ def sample_relay_point(
     alpha_t = cosine_annealing(
         t_train, 
         total_decay_steps,
-        initial_alpha=1.0,
-        final_alpha=0.0,
+        initial_alpha=initial_alpha,
+        final_alpha=final_alpha,
     )
     p_global_batch = get_global_preference(response_mask, alpha_t, std_ratio).to(device)
     p_local_batch = get_local_attraction(entropies, response_mask, temperature)
