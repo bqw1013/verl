@@ -1,4 +1,5 @@
 set -x
+
 # export CUDA_VISIBLE_DEVICES=0,1
 
 export VLLM_ATTENTION_BACKEND=XFORMERS
@@ -8,17 +9,17 @@ python3 -m recipe.dare.main_dare \
     algorithm.adv_estimator=grpo \
     data.train_files=$HOME/datasets/math/SimpleRL/simplerl_qwen_level3to5/train2nonmath.parquet \
     data.val_files=$HOME/datasets/math/SimpleRL/simplerl_qwen_level3to5/test2nonmath.parquet \
-    data.train_batch_size=32 \
-    data.max_prompt_length=512 \
+    data.train_batch_size=512 \
+    data.max_prompt_length=1024 \
     data.max_response_length=2048 \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
-    actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2___5-Math-1___5B \
+    actor_rollout_ref.model.path=/root/autodl-fs/models/Qwen/Qwen2.5-3B \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.use_liger=False \
-    actor_rollout_ref.actor.ppo_mini_batch_size=16 \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=8 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=256 \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=16 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.0001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
@@ -46,12 +47,12 @@ python3 -m recipe.dare.main_dare \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
-    trainer.project_name='test' \
-    trainer.experiment_name='test' \
-    trainer.n_gpus_per_node=2 \
+    trainer.project_name='off_policy' \
+    trainer.experiment_name='dare_simplerl_dynamic_3b' \
+    trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=80 \
+    trainer.save_freq=40 \
     trainer.test_freq=5 \
-    trainer.total_training_steps=400 \
-    trainer.relay_schedule="'[(0, 10, 1.0, 0.2), (16, 20, 1.0, 0.0)]'"  \
+    trainer.total_training_steps=480 \
+    trainer.relay_schedule="'[(21, 120, 1.0, 0.0), (221, 320, 1.0, 0.0)]'" \
     trainer.val_before_train=False

@@ -4,6 +4,7 @@ import random
 import itertools
 import numpy as np
 import scipy.stats as stats
+import pandas as pd
 
 from collections import defaultdict
 from typing import Union, List, Callable, Tuple
@@ -397,12 +398,24 @@ def update_batch(
     batch.batch["old_log_probs"][relay_samples_mask] = mixed_logprobs
     batch.batch["response_mask"][relay_samples_mask] = mixed_response_mask
 
-    # assert batch.batch["token_level_scores"][relay_samples_mask].sum()==0
     batch.batch["token_level_scores"][relay_samples_mask] = 0
     batch.batch["token_level_scores"][relay_samples_mask, mixed_response_mask.sum(-1) - 1] = 1
-    # assert (batch.batch["responses"][~relay_samples_mask] == batch.batch["raw_responses"][~relay_samples_mask]).all()
-    # assert (batch.batch["old_log_probs"][~relay_samples_mask] == batch.batch["raw_old_log_probs"][~relay_samples_mask]).all()
-    # batch.batch["token_level_scores"][torch.arange(len(batch.batch["response_mask"])), batch.batch["response_mask"].sum(dim=-1)-1]
+    return batch
+
+def compute_advantage(batch: DataProto):
+    raw_rewards = batch.batch["raw_token_level_scores"]
+    uid = batch.non_tensor_batch["uid"]
+    df = pd.DataFrame({"rewards": raw_rewards.sum(-1).cpu().numpy(), "uid": uid})
+    group_mean = df.groupby("uid")["rewards"].transform("mean")
+    group_std = df.groupby("uid")["rewards"].transform("std")
+    df["raw_advantage"] = (df["rewards"] - group_mean) / (group_std.fillna(0) + 1e-6)
+    df["group_max_advantage"] = df.groupby("uid")["raw_advantage"].transform("max").replace(0, np.sqrt(7))
+    raw_advantage = torch.tensor(df["raw_advantage"].to_numpy(), dtype=torch.float32)
+    group_max_advantage = torch.tensor(df["group_max_advantage"].to_numpy(), dtype=torch.float32)
+    advantages = torch.where(batch.batch["relay_samples_mask"], group_max_advantage, raw_advantage)
+    advantages = advantages.unsqueeze(-1) * batch.batch["response_mask"]
+    batch.batch["advantages"] = advantages
+    batch.batch["returns"] = advantages
     return batch
 
 def test_global_and_local_batch():

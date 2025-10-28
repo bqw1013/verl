@@ -497,7 +497,6 @@ class RayDareTrainer(RayPPOTrainer):
                                     "training/rollout_probs_diff_std": rollout_probs_diff_std.detach().item(),
                                 }
                             )
-
                     with marked_timer("relay", timing_raw, color="black"):
                         do_relay = False
                         for interval in self.relay_schedule:
@@ -631,20 +630,20 @@ class RayDareTrainer(RayPPOTrainer):
                             batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 
                         # compute advantages, executed on the driver process
+                        batch = dare_core.compute_advantage(batch)
+                        # norm_adv_by_std_in_grpo = self.config.algorithm.get(
+                        #     "norm_adv_by_std_in_grpo", True
+                        # )  # GRPO adv normalization factor
 
-                        norm_adv_by_std_in_grpo = self.config.algorithm.get(
-                            "norm_adv_by_std_in_grpo", True
-                        )  # GRPO adv normalization factor
-
-                        batch = compute_advantage(
-                            batch,
-                            adv_estimator=self.config.algorithm.adv_estimator,
-                            gamma=self.config.algorithm.gamma,
-                            lam=self.config.algorithm.lam,
-                            num_repeat=self.config.actor_rollout_ref.rollout.n,
-                            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-                            config=self.config.algorithm,
-                        )
+                        # batch = compute_advantage(
+                        #     batch,
+                        #     adv_estimator=self.config.algorithm.adv_estimator,
+                        #     gamma=self.config.algorithm.gamma,
+                        #     lam=self.config.algorithm.lam,
+                        #     num_repeat=self.config.actor_rollout_ref.rollout.n,
+                        #     norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+                        #     config=self.config.algorithm,
+                        # )
 
                     # update critic
                     if self.use_critic:
