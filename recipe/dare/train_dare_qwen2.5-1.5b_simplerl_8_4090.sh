@@ -48,11 +48,11 @@ python3 -m recipe.dare.main_dare \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='off_policy' \
-    trainer.experiment_name='dare_simplerl_dynamic_math_teacher' \
+    trainer.experiment_name='dare_simplerl_dynamic_20_start' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
-    trainer.save_freq=80 \
+    trainer.save_freq=40 \
     trainer.test_freq=5 \
-    trainer.total_training_steps=600 \
-    trainer.relay_schedule="'[(21, 120, 1.0, 0.0), (221, 320, 1.0, 0.0)]'" \
+    trainer.total_training_steps=320 \
+    trainer.relay_schedule="'[(21, 120, 1.0, 0.2)]'" \
     trainer.val_before_train=False

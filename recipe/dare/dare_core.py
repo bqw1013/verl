@@ -6,6 +6,7 @@ import numpy as np
 import scipy.stats as stats
 import pandas as pd
 
+from tensordict import TensorDict
 from collections import defaultdict
 from typing import Union, List, Callable, Tuple
 from scipy.special import softmax
@@ -341,7 +342,6 @@ def compute_relay_reward(
 
     return relay_reward
 
-
 def update_batch(
     batch: DataProto,
     relay_responses: List[List[int]],
@@ -400,6 +400,89 @@ def update_batch(
 
     batch.batch["token_level_scores"][relay_samples_mask] = 0
     batch.batch["token_level_scores"][relay_samples_mask, mixed_response_mask.sum(-1) - 1] = 1
+    return batch
+
+
+def update_batch_v2(
+    batch: DataProto,
+    relay_responses: List[List[int]],
+    relay_logprobs: List[List[float]],
+    relay_reward: torch.Tensor,
+    tokenizer: PreTrainedTokenizer,
+):
+    prompt_length = batch.batch["prompts"].shape[-1]
+    keys_to_update = ["input_ids", "attention_mask", "responses", "old_log_probs", "response_mask", "token_level_scores"]
+
+    # compress relay_responses and relay_logprobs by relay_reward
+    relay_responses = list(itertools.compress(relay_responses, relay_reward))
+    relay_logprobs = list(itertools.compress(relay_logprobs, relay_reward))
+
+    # update relay_samples_mask by relay_reward
+    relay_samples_mask = batch.batch["relay_samples_mask"]
+    relay_pos_index = relay_samples_mask.nonzero().squeeze()[relay_reward.bool()]
+    relay_samples_mask = torch.zeros_like(relay_samples_mask)
+    relay_samples_mask[relay_pos_index] = True
+    batch.batch["relay_samples_mask"] = relay_samples_mask
+
+    batch_relay_backup = {}
+    non_tensor_batch_relay_backup = {}
+    for key in batch.batch.keys():
+        batch_relay_backup[key] = batch.batch[key][relay_samples_mask].detach()
+    for key in batch.non_tensor_batch.keys():
+        non_tensor_batch_relay_backup[key] = batch.non_tensor_batch[key][relay_samples_mask]
+    batch_relay_backup["relay_samples_mask"].fill_(False)
+
+    # get raw responses, old_log_probs and relay_points
+    relay_samples_raw_responses = batch.batch["responses"][relay_samples_mask]
+    relay_samples_raw_old_logprobs = batch.batch["old_log_probs"][relay_samples_mask]
+    relay_samples_relay_points = batch.batch["relay_points"][relay_samples_mask]
+
+    # mix relay_responses and relay_logprobs
+    mixed_responses = []
+    mixed_logprobs = []
+
+    for i in range(relay_samples_raw_responses.shape[0]):
+        raw_response = relay_samples_raw_responses[i]
+        raw_old_logprob = relay_samples_raw_old_logprobs[i]
+        relay_point = relay_samples_relay_points[i]
+        relay_response = torch.tensor(relay_responses[i], dtype=raw_response.dtype, device=raw_response.device)
+        relay_logprob = torch.tensor(relay_logprobs[i], dtype=raw_old_logprob.dtype, device=raw_old_logprob.device)
+        mixed_response = torch.cat([raw_response[:relay_point], relay_response])
+        mixed_logprob = torch.cat([raw_old_logprob[:relay_point], relay_logprob])
+        mixed_responses.append(mixed_response)
+        mixed_logprobs.append(mixed_logprob)
+    assert all([len(mixed_responses[i])==len(mixed_logprobs[i]) for i in range(len(mixed_responses))]), "mixed_responses and mixed_logprobs must have the same length"
+    
+    # pad mixed_responses and mixed_logprobs
+    max_response_length = batch.batch["responses"].shape[1]
+    mixed_responses = pad_sequence(mixed_responses, batch_first=True, padding_value=tokenizer.pad_token_id)
+    mixed_responses = pad_sequence_to_length(mixed_responses, max_response_length, tokenizer.pad_token_id, left_pad=False)
+    mixed_logprobs = pad_sequence(mixed_logprobs, batch_first=True, padding_value=0)
+    mixed_logprobs = pad_sequence_to_length(mixed_logprobs, max_response_length, 0, left_pad=False)
+    mixed_response_mask = (mixed_responses!=tokenizer.pad_token_id).long()
+    
+    # backup original batch
+    for key in keys_to_update:
+        batch.meta_info[f"raw_{key}"] = batch.batch[key].detach().clone()
+
+    # update batch
+    batch.batch["responses"][relay_samples_mask] = mixed_responses
+    batch.batch["old_log_probs"][relay_samples_mask] = mixed_logprobs
+    batch.batch["response_mask"][relay_samples_mask] = mixed_response_mask
+    batch.batch["token_level_scores"][relay_samples_mask] = 0
+    batch.batch["token_level_scores"][relay_samples_mask, mixed_response_mask.sum(-1) - 1] = 1
+    batch.batch["input_ids"] = torch.cat([batch.batch["prompts"], batch.batch["responses"]], dim=-1)
+    batch.batch["attention_mask"] = torch.cat([batch.batch["attention_mask"][:, :prompt_length], batch.batch["response_mask"]], dim=-1)
+    
+    cat_batch_size = list(batch_relay_backup.values())[0].shape[0]
+    cat_batch_size = cat_batch_size - cat_batch_size % 8
+    for key in batch_relay_backup.keys():
+        batch_relay_backup[key] = torch.cat([batch.batch[key],batch_relay_backup[key][:cat_batch_size]], dim=0)
+    new_batch_size = list(batch_relay_backup.values())[0].shape[0]
+    batch.batch = TensorDict(source=batch_relay_backup, batch_size=new_batch_size)
+    for key in non_tensor_batch_relay_backup.keys():
+        batch.non_tensor_batch[key] = np.concatenate([batch.non_tensor_batch[key], non_tensor_batch_relay_backup[key][:cat_batch_size]], axis=0)
+
     return batch
 
 def compute_advantage(batch: DataProto):

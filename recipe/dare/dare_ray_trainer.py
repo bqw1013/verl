@@ -497,6 +497,7 @@ class RayDareTrainer(RayPPOTrainer):
                                     "training/rollout_probs_diff_std": rollout_probs_diff_std.detach().item(),
                                 }
                             )
+
                     with marked_timer("relay", timing_raw, color="black"):
                         do_relay = False
                         for interval in self.relay_schedule:
@@ -566,11 +567,12 @@ class RayDareTrainer(RayPPOTrainer):
                                     temperature=rollout_service_config.temperature,
                                     top_p=rollout_service_config.top_p,
                                 )
+                                solutions = [self.tokenizer.decode(prompt, skip_special_tokens=True)+response for prompt, response in zip(relay_samples_prompt, relay_samples_outputs["text"])]
 
                                 # 5. compute relay reward
                                 relay_reward = dare_core.compute_relay_reward(
                                     data_source=batch.non_tensor_batch["data_source"][relay_samples_mask],
-                                    solution_str=relay_samples_outputs["text"],
+                                    solution_str=solutions,
                                     ground_truth=[item["ground_truth"] for item in batch.non_tensor_batch["reward_model"][relay_samples_mask]],
                                     extra_info=batch.non_tensor_batch["extra_info"][relay_samples_mask],
                                     compute_score=self.reward_fn.compute_score,
@@ -579,7 +581,7 @@ class RayDareTrainer(RayPPOTrainer):
                                 relay_reward = torch.tensor(relay_reward, dtype=reward_tensor.dtype, device=reward_tensor.device)
                                 metrics.update(
                                     {
-                                        "relay/rollout_success_ration": relay_samples_outputs["status"].count("success") / len(relay_samples_outputs["status"]),
+                                        "relay/rollout_success_ratio": relay_samples_outputs["status"].count("success") / len(relay_samples_outputs["status"]),
                                         "relay/relay_reward_positive_num": relay_reward.sum().detach().item(),
                                         "relay/relay_reward_positive_ratio": relay_reward.sum().detach().item() / len(relay_reward),
                                     }
@@ -587,7 +589,7 @@ class RayDareTrainer(RayPPOTrainer):
                                 
                                 # 6. update batch
                                 if relay_reward.any():
-                                    batch = dare_core.update_batch(
+                                    batch = dare_core.update_batch_v2(
                                         batch=batch,
                                         relay_responses=relay_samples_outputs["token_ids"],
                                         relay_logprobs=relay_samples_outputs["logprobs"],
@@ -597,7 +599,7 @@ class RayDareTrainer(RayPPOTrainer):
 
                                     metrics.update(
                                         {
-                                            "relay/token_level_scores_before_sum": batch.batch["raw_token_level_scores"].sum().detach().item(),
+                                            "relay/token_level_scores_before_sum": batch.meta_info["raw_token_level_scores"].sum().item(),
                                             "relay/token_level_scores_after_sum": batch.batch["token_level_scores"].sum().detach().item(),
                                         }
                                     )
