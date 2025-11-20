@@ -1,12 +1,18 @@
 STEPS=(
-    "480"
-    "400"
+    "320"
+    "280"
+    "240"
+    "200"
+    "160"
+    "120"
+    "80"
+    "40"
 )
 
 for step in "${STEPS[@]}"; do
     python scripts/legacy_model_merger.py merge \
         --backend fsdp \
         --hf_model_path /root/autodl-fs/models/Qwen/Qwen2.5-1.5B \
-        --local_dir /root/autodl-tmp/code/verl/checkpoints/off_policy/dare_simplerl_dynamic_0.6/global_step_${step}/actor \
-        --target_dir /root/autodl-fs/models/qwen2.5_1.5b_dare_simplerl_dynamic_0.6/step_${step}
+        --local_dir /root/autodl-tmp/code/verl/checkpoints/off_policy/dare_simplerl_dynamic_inter_200/global_step_${step}/actor \
+        --target_dir /root/autodl-fs/models/qwen2.5_1.5b_dare_simplerl_dynamic_inter_200/step_${step}
 done

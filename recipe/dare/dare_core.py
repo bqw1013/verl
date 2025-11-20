@@ -424,12 +424,13 @@ def update_batch_v2(
     relay_samples_mask[relay_pos_index] = True
     batch.batch["relay_samples_mask"] = relay_samples_mask
 
+    backup_mask = (batch.batch["token_level_scores"].sum(dim=-1)==0) & relay_samples_mask
     batch_relay_backup = {}
     non_tensor_batch_relay_backup = {}
     for key in batch.batch.keys():
-        batch_relay_backup[key] = batch.batch[key][relay_samples_mask].detach()
+        batch_relay_backup[key] = batch.batch[key][backup_mask].detach()
     for key in batch.non_tensor_batch.keys():
-        non_tensor_batch_relay_backup[key] = batch.non_tensor_batch[key][relay_samples_mask]
+        non_tensor_batch_relay_backup[key] = batch.non_tensor_batch[key][backup_mask]
     batch_relay_backup["relay_samples_mask"].fill_(False)
 
     # get raw responses, old_log_probs and relay_points

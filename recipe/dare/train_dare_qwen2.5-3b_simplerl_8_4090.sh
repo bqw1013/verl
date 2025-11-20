@@ -36,7 +36,7 @@ python3 -m recipe.dare.main_dare \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
     actor_rollout_ref.rollout.n=8 \
     actor_rollout_ref.rollout.service.base_url=https://u66551-baab-24341aca.cqa1.seetacloud.com:8443/v1 \
-    actor_rollout_ref.rollout.service.model_name=Qwen2.5-7B-Instruct \
+    actor_rollout_ref.rollout.service.model_name=Qwen2.5-14B-Instruct \
     actor_rollout_ref.rollout.service.api_key=none \
     actor_rollout_ref.rollout.service.temperature=1.0 \
     actor_rollout_ref.rollout.service.top_p=0.8 \
@@ -48,11 +48,11 @@ python3 -m recipe.dare.main_dare \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='off_policy' \
-    trainer.experiment_name='dare_simplerl_dynamic_3b' \
+    trainer.experiment_name='dare_simplerl_dynamic_neg_backup' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \
     trainer.test_freq=5 \
-    trainer.total_training_steps=480 \
-    trainer.relay_schedule="'[(21, 120, 1.0, 0.0), (221, 320, 1.0, 0.0)]'" \
+    trainer.total_training_steps=320 \
+    trainer.relay_schedule="'[(21, 120, 1.0, 0.0),(161, 260, 1.0, 0.0)]'" \
     trainer.val_before_train=False

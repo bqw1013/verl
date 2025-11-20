@@ -54,8 +54,8 @@ class AsyncRemoteServiceRollout:
         top_p: float = 0.9,
         **kwargs
     ):
-        if not isinstance(prompt, List):
-            raise ValueError(f"prompt must be a list of integers, got {type(prompt)}")
+        # if not isinstance(prompt, List):
+        #     raise ValueError(f"prompt must be a list of integers, got {type(prompt)}")
         
         request_params = kwargs.copy()
         request_params.update({
@@ -72,6 +72,7 @@ class AsyncRemoteServiceRollout:
                 extra_body={"return_tokens_as_token_ids": True},
                 **request_params
             )
+
             return {
                 "status": "success",
                 "text": response.choices[0].text,
