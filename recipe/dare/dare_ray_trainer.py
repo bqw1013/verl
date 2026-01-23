@@ -65,6 +65,7 @@ from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 
 import recipe.dare.dare_core as dare_core
 from recipe.dare.service_rollout import AsyncRemoteServiceRollout
+from recipe.dare.core_algos import compute_grpo_outcome_advantage_v1
 
 WorkerType = type[Worker]
 
@@ -538,8 +539,6 @@ class RayDareTrainer(RayPPOTrainer):
                                 reward_tensor.sum(dim=-1),batch.non_tensor_batch["uid"])
                             
                             batch.batch["relay_samples_mask"] = relay_samples_mask
-                            # if self.global_steps <= 20:
-                            #     batch.batch["relay_samples_mask"].fill_(False)
 
                             metrics.update(
                                 {

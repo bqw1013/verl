@@ -43,7 +43,7 @@ class AsyncRemoteServiceRollout:
             self._thread.join()
     
     def _create_async_client(self):
-        return AsyncOpenAI(base_url=self.base_url, api_key=self.api_key)
+        return AsyncOpenAI(base_url=self.base_url, api_key=self.api_key, timeout=300)
 
     async def _request_api_async(
         self,

@@ -285,7 +285,8 @@ def allocate_relay_budget(k: int, c: int, n: int, gamma: float = 1.0) -> Tuple[i
                 k_fail += 1
                 available_fail -= 1
 
-    return k_succ, k_fail
+    # return k_succ, k_fail
+    return 0, k_fail
 
 def determine_relay_samples(rewards: torch.Tensor, uids: List[int], relay_sample_fn: Callable = None):
     if rewards.shape[0] != len(uids):

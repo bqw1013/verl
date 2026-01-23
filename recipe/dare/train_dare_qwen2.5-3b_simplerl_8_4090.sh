@@ -48,11 +48,11 @@ python3 -m recipe.dare.main_dare \
     trainer.critic_warmup=0 \
     trainer.logger=['console','swanlab'] \
     trainer.project_name='off_policy' \
-    trainer.experiment_name='dare_simplerl_dynamic_neg_backup' \
+    trainer.experiment_name='dare_simplerl_dynamic_only_neg_relay_new_advantage_gspo' \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes=1 \
     trainer.save_freq=40 \
     trainer.test_freq=5 \
     trainer.total_training_steps=320 \
-    trainer.relay_schedule="'[(21, 120, 1.0, 0.0),(161, 260, 1.0, 0.0)]'" \
+    trainer.relay_schedule="'[(21, 120, 1.0, 0.0)]'" \
     trainer.val_before_train=False
