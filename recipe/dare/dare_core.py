@@ -434,6 +434,11 @@ def update_batch_v2(
         non_tensor_batch_relay_backup[key] = batch.non_tensor_batch[key][backup_mask]
     batch_relay_backup["relay_samples_mask"].fill_(False)
 
+    # update response_mask
+    col_indices = torch.arange(batch_relay_backup["response_mask"].size(1)).unsqueeze(0)
+    response_mask_relay_mask = col_indices < batch_relay_backup["relay_points"].unsqueeze(1)
+    batch_relay_backup["response_mask"] = batch_relay_backup["response_mask"].masked_fill_(response_mask_relay_mask, 0)
+
     # get raw responses, old_log_probs and relay_points
     relay_samples_raw_responses = batch.batch["responses"][relay_samples_mask]
     relay_samples_raw_old_logprobs = batch.batch["old_log_probs"][relay_samples_mask]
@@ -442,6 +447,7 @@ def update_batch_v2(
     # mix relay_responses and relay_logprobs
     mixed_responses = []
     mixed_logprobs = []
+    mixed_response_masks = []
 
     for i in range(relay_samples_raw_responses.shape[0]):
         raw_response = relay_samples_raw_responses[i]
@@ -451,8 +457,10 @@ def update_batch_v2(
         relay_logprob = torch.tensor(relay_logprobs[i], dtype=raw_old_logprob.dtype, device=raw_old_logprob.device)
         mixed_response = torch.cat([raw_response[:relay_point], relay_response])
         mixed_logprob = torch.cat([raw_old_logprob[:relay_point], relay_logprob])
+        mixed_response_mask = (torch.arange(mixed_response.size(0))>=relay_point).long()
         mixed_responses.append(mixed_response)
         mixed_logprobs.append(mixed_logprob)
+        mixed_response_masks.append(mixed_response_mask)
     assert all([len(mixed_responses[i])==len(mixed_logprobs[i]) for i in range(len(mixed_responses))]), "mixed_responses and mixed_logprobs must have the same length"
     
     # pad mixed_responses and mixed_logprobs
@@ -461,7 +469,8 @@ def update_batch_v2(
     mixed_responses = pad_sequence_to_length(mixed_responses, max_response_length, tokenizer.pad_token_id, left_pad=False)
     mixed_logprobs = pad_sequence(mixed_logprobs, batch_first=True, padding_value=0)
     mixed_logprobs = pad_sequence_to_length(mixed_logprobs, max_response_length, 0, left_pad=False)
-    mixed_response_mask = (mixed_responses!=tokenizer.pad_token_id).long()
+    mixed_response_masks = pad_sequence(mixed_response_masks, batch_first=True, padding_value=0)
+    mixed_response_masks = pad_sequence_to_length(mixed_response_masks, max_response_length, 0, left_pad=False)
     
     # backup original batch
     for key in keys_to_update:
@@ -470,9 +479,10 @@ def update_batch_v2(
     # update batch
     batch.batch["responses"][relay_samples_mask] = mixed_responses
     batch.batch["old_log_probs"][relay_samples_mask] = mixed_logprobs
-    batch.batch["response_mask"][relay_samples_mask] = mixed_response_mask
+    batch.batch["response_mask"][relay_samples_mask] = mixed_response_masks
     batch.batch["token_level_scores"][relay_samples_mask] = 0
-    batch.batch["token_level_scores"][relay_samples_mask, mixed_response_mask.sum(-1) - 1] = 1
+    last_token_indices = torch.where(mixed_response_masks.bool(), torch.arange(mixed_response_masks.shape[1]), -1).max(dim=1).values
+    batch.batch["token_level_scores"][relay_samples_mask, last_token_indices] = 1
     batch.batch["input_ids"] = torch.cat([batch.batch["prompts"], batch.batch["responses"]], dim=-1)
     batch.batch["attention_mask"] = torch.cat([batch.batch["attention_mask"][:, :prompt_length], batch.batch["response_mask"]], dim=-1)
     
